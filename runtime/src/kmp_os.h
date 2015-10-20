@@ -722,6 +722,11 @@ enum kmp_warnings_level {
 } // extern "C"
 #endif // __cplusplus
 
+/* ---------------------- Support for TLS threadprivate. -----------------*/
+
+// add architecctures/OS to the macro below to enable TLS based threadprivate 
+#define KMP_THREADPRIVATE_TLS ((KMP_ARCH_PPC64))
+
 #endif /* KMP_OS_H */
 // Safe C API
 #include "kmp_safe_c_api.h"

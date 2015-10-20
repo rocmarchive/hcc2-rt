@@ -54,6 +54,9 @@ char const __kmp_version_omp_api[] = KMP_VERSION_PREFIX "API version: "
 char const __kmp_version_lock[] = KMP_VERSION_PREFIX "lock type: run time selectable";
 #endif /* KMP_DEBUG */
 
+#if KMP_THREADPRIVATE_TLS
+void kmpc_threadprivate_call_unprocessed_constructors();
+#endif
 
 #define KMP_MIN( x, y ) ( (x) < (y) ? (x) : (y) )
 
@@ -5580,6 +5583,9 @@ __kmp_launch_thread( kmp_info_t *this_thr )
                 KMP_STOP_EXPLICIT_TIMER(USER_launch_thread_loop);
                 {
                     KMP_TIME_BLOCK(USER_worker_invoke);
+#if KMP_THREADPRIVATE_TLS
+                    kmpc_threadprivate_call_unprocessed_constructors();
+#endif
                     rc = (*pteam)->t.t_invoke( gtid );
                 }
                 KMP_START_EXPLICIT_TIMER(USER_launch_thread_loop);

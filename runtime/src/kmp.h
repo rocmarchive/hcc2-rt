@@ -3370,6 +3370,14 @@ KMP_EXPORT kmp_int32 __kmpc_reduce( ident_t *loc, kmp_int32 global_tid,
                                     kmp_critical_name *lck );
 KMP_EXPORT void __kmpc_end_reduce( ident_t *loc, kmp_int32 global_tid, kmp_critical_name *lck );
 
+KMP_EXPORT kmp_int32 __kmpc_reduce41( ident_t *loc, kmp_int32 global_tid,
+                                    kmp_int32 num_vars, size_t reduce_size,
+                                    void *reduce_data, void *reduce_array_size, void (*reduce_func)(void *lhs_data, void *rhs_data),
+                                    kmp_critical_name *lck );
+KMP_EXPORT kmp_int32 __kmpc_reduce_nowait41( ident_t *loc, kmp_int32 global_tid,
+                                           kmp_int32 num_vars, size_t reduce_size,
+                                           void *reduce_data, void *reduce_array_size, void (*reduce_func)(void *lhs_data, void *rhs_data),
+                                           kmp_critical_name *lck );
 /*
  * internal fast reduction routines
  */
