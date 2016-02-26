@@ -390,6 +390,8 @@ kmpc_set_defaults                           224
 	__kmpc_proxy_task_completed	    259
 	__kmpc_proxy_task_completed_ooo	    260
     %endif
+  __kmpc_reduce41                           261
+  __kmpc_end_reduce41                       262
 %endif
 
 # User API entry points that have both lower- and upper- case versions for Fortran.
