@@ -308,6 +308,7 @@ __kmp_for_static_init(
                     }
                 }
             }
+            *pstride = trip_count;
             break;
         }
     case kmp_sch_static_chunked:
@@ -780,8 +781,8 @@ __kmpc_for_static_init_4( ident_t *loc, kmp_int32 gtid, kmp_int32 schedtype, kmp
                       kmp_int32 *plower, kmp_int32 *pupper,
                       kmp_int32 *pstride, kmp_int32 incr, kmp_int32 chunk )
 {
-    __kmp_for_static_init< kmp_int32 >(
-                      loc, gtid, schedtype, plastiter, plower, pupper, pstride, incr, chunk );
+        __kmp_for_static_init< kmp_int32 >(
+                          loc, gtid, schedtype, plastiter, plower, pupper, pstride, incr, chunk );
 }
 
 /*!
@@ -792,8 +793,8 @@ __kmpc_for_static_init_4u( ident_t *loc, kmp_int32 gtid, kmp_int32 schedtype, km
                       kmp_uint32 *plower, kmp_uint32 *pupper,
                       kmp_int32 *pstride, kmp_int32 incr, kmp_int32 chunk )
 {
-    __kmp_for_static_init< kmp_uint32 >(
-                      loc, gtid, schedtype, plastiter, plower, pupper, pstride, incr, chunk );
+        __kmp_for_static_init< kmp_uint32 >(
+                          loc, gtid, schedtype, plastiter, plower, pupper, pstride, incr, chunk );
 }
 
 /*!
@@ -804,8 +805,8 @@ __kmpc_for_static_init_8( ident_t *loc, kmp_int32 gtid, kmp_int32 schedtype, kmp
                       kmp_int64 *plower, kmp_int64 *pupper,
                       kmp_int64 *pstride, kmp_int64 incr, kmp_int64 chunk )
 {
-    __kmp_for_static_init< kmp_int64 >(
-                      loc, gtid, schedtype, plastiter, plower, pupper, pstride, incr, chunk );
+        __kmp_for_static_init< kmp_int64 >(
+                          loc, gtid, schedtype, plastiter, plower, pupper, pstride, incr, chunk );
 }
 
 /*!
@@ -816,8 +817,8 @@ __kmpc_for_static_init_8u( ident_t *loc, kmp_int32 gtid, kmp_int32 schedtype, km
                       kmp_uint64 *plower, kmp_uint64 *pupper,
                       kmp_int64 *pstride, kmp_int64 incr, kmp_int64 chunk )
 {
-    __kmp_for_static_init< kmp_uint64 >(
-                      loc, gtid, schedtype, plastiter, plower, pupper, pstride, incr, chunk );
+        __kmp_for_static_init< kmp_uint64 >(
+                          loc, gtid, schedtype, plastiter, plower, pupper, pstride, incr, chunk );
 }
 /*!
 @}

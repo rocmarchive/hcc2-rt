@@ -87,8 +87,6 @@ static pthread_mutexattr_t __kmp_suspend_mutex_attr;
 static kmp_cond_align_t    __kmp_wait_cv;
 static kmp_mutex_align_t   __kmp_wait_mx;
 
-double __kmp_ticks_per_nsec;
-
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
 
@@ -759,7 +757,6 @@ __kmp_launch_worker( void *thr )
     return exit_val;
 }
 
-#if KMP_USE_MONITOR
 /* The monitor thread controls all of the threads in the complex */
 
 static void*
@@ -956,7 +953,6 @@ __kmp_launch_monitor( void *thr )
 
     return thr;
 }
-#endif // KMP_USE_MONITOR
 
 void
 __kmp_create_worker( int gtid, kmp_info_t *th, size_t stack_size )
@@ -1081,7 +1077,6 @@ __kmp_create_worker( int gtid, kmp_info_t *th, size_t stack_size )
 } // __kmp_create_worker
 
 
-#if KMP_USE_MONITOR
 void
 __kmp_create_monitor( kmp_info_t *th )
 {
@@ -1242,7 +1237,6 @@ __kmp_create_monitor( kmp_info_t *th )
     KA_TRACE( 10, ( "__kmp_create_monitor: monitor created %#.8lx\n", th->th.th_info.ds.ds_thread ) );
 
 } // __kmp_create_monitor
-#endif // KMP_USE_MONITOR
 
 void
 __kmp_exit_thread(
@@ -1251,7 +1245,6 @@ __kmp_exit_thread(
     pthread_exit( (void *)(intptr_t) exit_status );
 } // __kmp_exit_thread
 
-#if KMP_USE_MONITOR
 void __kmp_resume_monitor();
 
 void
@@ -1303,7 +1296,6 @@ __kmp_reap_monitor( kmp_info_t *th )
     KMP_MB();       /* Flush all pending memory write invalidates.  */
 
 }
-#endif // KMP_USE_MONITOR
 
 void
 __kmp_reap_worker( kmp_info_t *th )
@@ -1532,9 +1524,7 @@ __kmp_atfork_child (void)
     ++__kmp_fork_count;
 
     __kmp_init_runtime = FALSE;
-#if KMP_USE_MONITOR
     __kmp_init_monitor = 0;
-#endif
     __kmp_init_parallel = FALSE;
     __kmp_init_middle = FALSE;
     __kmp_init_serial = FALSE;
@@ -1853,7 +1843,6 @@ void __kmp_resume_oncore(int target_gtid, kmp_flag_oncore *flag) {
     __kmp_resume_template(target_gtid, flag);
 }
 
-#if KMP_USE_MONITOR
 void
 __kmp_resume_monitor()
 {
@@ -1881,7 +1870,6 @@ __kmp_resume_monitor()
     KF_TRACE( 30, ( "__kmp_resume_monitor: T#%d exiting after signaling wake up for T#%d\n",
                     gtid, KMP_GTID_MONITOR ) );
 }
-#endif // KMP_USE_MONITOR
 
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
@@ -1889,11 +1877,7 @@ __kmp_resume_monitor()
 void
 __kmp_yield( int cond )
 {
-    if (cond
-#if KMP_USE_MONITOR
-        && __kmp_yielding_on
-#endif
-    ) {
+    if (cond && __kmp_yielding_on) {
         sched_yield();
     }
 }
@@ -2229,20 +2213,6 @@ __kmp_now_nsec()
     gettimeofday(&t, NULL);
     return KMP_NSEC_PER_SEC*t.tv_sec + 1000*t.tv_usec;
 }
-
-#if KMP_ARCH_X86 || KMP_ARCH_X86_64
-/* Measure clock tick per nanosecond */
-void
-__kmp_initialize_system_tick()
-{
-    kmp_uint64 delay = 100000; // 50~100 usec on most machines.
-    kmp_uint64 nsec = __kmp_now_nsec();
-    kmp_uint64 goal = __kmp_hardware_timestamp() + delay;
-    kmp_uint64 now;
-    while ((now = __kmp_hardware_timestamp()) < goal);
-    __kmp_ticks_per_nsec = 1.0 * (delay + (now - goal)) / (__kmp_now_nsec() - nsec);
-}
-#endif
 
 /*
     Determine whether the given address is mapped into the current address space.

@@ -63,7 +63,7 @@
 # error Unknown compiler
 #endif
 
-#if (KMP_OS_LINUX || KMP_OS_WINDOWS) && !KMP_OS_CNK && !KMP_ARCH_PPC64
+#if (KMP_OS_LINUX || KMP_OS_WINDOWS) && !KMP_OS_CNK && !KMP_ARCH_PPC64_BE
 # define KMP_AFFINITY_SUPPORTED 1
 # if KMP_OS_WINDOWS && KMP_ARCH_X86_64
 #  define KMP_GROUP_AFFINITY    1
@@ -709,6 +709,11 @@ enum kmp_warnings_level {
 #ifdef __cplusplus
 } // extern "C"
 #endif // __cplusplus
+
+/* ---------------------- Support for TLS threadprivate. -----------------*/
+
+// add architecctures/OS to the macro below to enable TLS based threadprivate 
+#define KMP_THREADPRIVATE_TLS ((KMP_ARCH_PPC64))
 
 #endif /* KMP_OS_H */
 // Safe C API

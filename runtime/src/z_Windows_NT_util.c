@@ -140,9 +140,7 @@ static HMODULE kernel32 = NULL;
     static int         __kmp_siginstalled[ NSIG ];
 #endif
 
-#if KMP_USE_MONITOR
 static HANDLE   __kmp_monitor_ev;
-#endif
 static kmp_int64 __kmp_win32_time;
 double __kmp_win32_tick;
 
@@ -1197,15 +1195,6 @@ __kmp_read_system_time( double *delta )
     }
 }
 
-/* Return the current time stamp in nsec */
-kmp_uint64
-__kmp_now_nsec()
-{
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
-    return 1e9 * __kmp_win32_tick * now.QuadPart;
-}
-
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
 
@@ -1264,7 +1253,6 @@ __kmp_launch_worker( void *arg )
     return exit_val;
 }
 
-#if KMP_USE_MONITOR
 /* The monitor thread controls all of the threads in the complex */
 
 void * __stdcall
@@ -1374,7 +1362,6 @@ __kmp_launch_monitor( void *arg )
     KMP_MB();
     return arg;
 }
-#endif
 
 void
 __kmp_create_worker( int gtid, kmp_info_t *th, size_t stack_size )
@@ -1468,7 +1455,6 @@ __kmp_still_running(kmp_info_t *th) {
     return (WAIT_TIMEOUT == WaitForSingleObject( th->th.th_info.ds.ds_thread, 0));
 }
 
-#if KMP_USE_MONITOR
 void
 __kmp_create_monitor( kmp_info_t *th )
 {
@@ -1539,7 +1525,6 @@ __kmp_create_monitor( kmp_info_t *th )
     KA_TRACE( 10, ("__kmp_create_monitor: monitor created %p\n",
                    (void *) th->th.th_info.ds.ds_thread ) );
 }
-#endif
 
 /*
   Check to see if thread is still alive.
@@ -1656,7 +1641,6 @@ __kmp_reap_common( kmp_info_t * th )
     KMP_MB();       /* Flush all pending memory write invalidates.  */
 }
 
-#if KMP_USE_MONITOR
 void
 __kmp_reap_monitor( kmp_info_t *th )
 {
@@ -1693,7 +1677,6 @@ __kmp_reap_monitor( kmp_info_t *th )
 
     KMP_MB();       /* Flush all pending memory write invalidates.  */
 }
-#endif
 
 void
 __kmp_reap_worker( kmp_info_t * th )

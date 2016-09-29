@@ -2781,6 +2781,19 @@ __kmpc_reduce_nowait(
     return retval;
 }
 
+// Interface that also supports array reduction. Currently defaults to use the
+// version that does not do any array reduction.
+kmp_int32
+__kmpc_reduce_nowait41(
+    ident_t *loc, kmp_int32 global_tid,
+    kmp_int32 num_vars, size_t reduce_size, void *reduce_data, void *reduce_array_size, void (*reduce_func)(void *lhs_data, void *rhs_data),
+    kmp_critical_name *lck ) {
+
+  if (reduce_array_size) {
+    KMP_ASSERT( 0 ); // "This library does not support array reduction yet."
+  }
+  return __kmpc_reduce_nowait(loc, global_tid, num_vars, reduce_size, reduce_data, reduce_func, lck);
+}
 /*!
 @ingroup SYNCHRONIZATION
 @param loc source location information
@@ -2925,6 +2938,20 @@ __kmpc_reduce(
     return retval;
 }
 
+
+// Interface that also supports array reduction. Currently defaults to use the
+// version that does not do any array reduction.
+kmp_int32
+__kmpc_reduce41(
+    ident_t *loc, kmp_int32 global_tid,
+    kmp_int32 num_vars, size_t reduce_size, void *reduce_data, void *reduce_array_size, void (*reduce_func)(void *lhs_data, void *rhs_data),
+    kmp_critical_name *lck ) {
+
+  if (reduce_array_size) {
+    KMP_ASSERT( 0 ); // "This library does not support array reduction yet."
+  }
+  return __kmpc_reduce(loc, global_tid, num_vars, reduce_size, reduce_data, reduce_func, lck);
+}
 /*!
 @ingroup SYNCHRONIZATION
 @param loc source location information
