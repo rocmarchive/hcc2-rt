@@ -124,7 +124,7 @@ void __tgt_register_lib(__tgt_bin_desc *desc);
 void __tgt_unregister_lib(__tgt_bin_desc *desc);
 
 // creates the host to target data mapping, stores it in the
-// libtarget.so internal structure (an entry in a stack of data maps) and
+// libomptarget.so internal structure (an entry in a stack of data maps) and
 // passes the data to the device;
 void __tgt_target_data_begin(int32_t device_id, int32_t arg_num,
                              void **args_base, void **args, int64_t *arg_sizes,

@@ -98,11 +98,13 @@ struct DeviceTy {
 
   std::mutex DataMapMtx, PendingGlobalsMtx, ShadowMtx;
 
+  uint64_t loopTripCnt;
+
   DeviceTy(RTLInfoTy *RTL)
       : DeviceID(-1), RTL(RTL), RTLDeviceID(-1), IsInit(false), InitFlag(),
         HasPendingGlobals(false), HostDataToTargetMap(),
         PendingCtorsDtors(), ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(),
-        ShadowMtx() {}
+        ShadowMtx(), loopTripCnt(0) {}
 
   // The existence of mutexes makes DeviceTy non-copyable. We need to
   // provide a copy constructor and an assignment operator explicitly.
@@ -116,6 +118,7 @@ struct DeviceTy {
     HostDataToTargetMap = d.HostDataToTargetMap;
     PendingCtorsDtors = d.PendingCtorsDtors;
     ShadowPtrMap = d.ShadowPtrMap;
+    loopTripCnt = d.loopTripCnt;
   }
 
   DeviceTy& operator=(const DeviceTy &d) {
@@ -127,6 +130,7 @@ struct DeviceTy {
     HostDataToTargetMap = d.HostDataToTargetMap;
     PendingCtorsDtors = d.PendingCtorsDtors;
     ShadowPtrMap = d.ShadowPtrMap;
+    loopTripCnt = d.loopTripCnt;
 
     return *this;
   }
@@ -2135,8 +2139,13 @@ EXTERN int __tgt_target_teams_nowait(int32_t device_id, void *host_ptr,
                             arg_sizes, arg_types, team_num, thread_limit);
 }
 
-EXTERN void __kmpc_push_target_tripcount(int32_t device_id, uint64_t loop_tripcount) {
-  // TODO: Add implementation.
+EXTERN void __kmpc_push_target_tripcount(int32_t device_id,
+    uint64_t loop_tripcount) {
+  if (device_id == OFFLOAD_DEVICE_DEFAULT) {
+    device_id = omp_get_default_device();
+  }
+  DP("__kmpc_push_target_tripcount(%d, %lu)\n", device_id, loop_tripcount);
+  Devices[device_id].loopTripCnt = loop_tripcount;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
