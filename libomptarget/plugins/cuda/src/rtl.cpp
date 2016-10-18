@@ -466,7 +466,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
         ThreadLimitPtr));
 #else
     // default value GENERIC (in case symbol is missing from cubin file)
-    int8_t ExecModeVal = 1;
+    int8_t ExecModeVal = ExecutionModeType::GENERIC;
     const char suffix[] = "_exec_mode";
     int32_t ExecModeLen = (strlen(e->name) + strlen(suffix) + 1) * sizeof(char);
     char * ExecModeName = (char *) malloc(ExecModeLen);
@@ -619,7 +619,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 
   int cudaThreadsPerBlock = (thread_limit <= 0 || thread_limit *
       KernelInfo->SimdInfo > DeviceInfo.ThreadsPerBlock[device_id]) ?
-      (DeviceInfo.ThreadsPerBlock[device_id] - DeviceInfo.WarpSize[device_id]) :
+      DeviceInfo.ThreadsPerBlock[device_id] :
       thread_limit * KernelInfo->SimdInfo;
 #ifndef OLD_SCHEME
   if (KernelInfo->ExecutionMode == GENERIC)
