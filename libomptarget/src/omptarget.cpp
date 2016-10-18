@@ -727,12 +727,18 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
 
   DataMapMtx.lock();
   for (auto &HT : HostDataToTargetMap) {
-    if (hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd) {
-      if ((hp + Size) > HT.HstPtrEnd) {
-        DP("WARNING: Array contains pointer but does not contain the complete "
-           "section\n");
-      }
-
+    bool isContained = hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd;
+    bool extendsBefore = hp < HT.HstPtrBegin && (hp + Size) > HT.HstPtrBegin;
+    bool extendsAfter = isContained && (hp + Size) > HT.HstPtrEnd;
+    if (extendsBefore) {
+      DP("WARNING: Pointer is not mapped but section extends into already "
+          "mapped region\n");
+    }
+    if (extendsAfter) {
+      DP("WARNING: Pointer is already mapped but section extends beyond mapped "
+          "region \n");
+    }
+    if (isContained || extendsBefore || extendsAfter) {
       IsLast = !(HT.RefCount > 1);
 
       if (HT.RefCount > 1 && UpdateRefCount)
@@ -758,11 +764,20 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
   DataMapMtx.lock();
   for (auto &HT : HostDataToTargetMap) {
     // Is it contained?
-    if (hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd) {
-      if ((hp + Size) > HT.HstPtrEnd) {
-        DP("WARNING: Array contains pointer but does not contain the complete "
-           "section\n");
-      }
+    bool isContained = hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd;
+    // Does it extend into an already mapped region?
+    bool extendsBefore = hp < HT.HstPtrBegin && (hp + Size) > HT.HstPtrBegin;
+    // Does it extend beyond the mapped region?
+    bool extendsAfter = isContained && (hp + Size) > HT.HstPtrEnd;
+    if (extendsBefore) {
+      DP("WARNING: Pointer is not mapped but section extends into already "
+          "mapped data\n");
+    }
+    if (extendsAfter) {
+      DP("WARNING: Pointer is already mapped but section extends beyond mapped "
+          "region\n");
+    }
+    if (isContained || extendsBefore || extendsAfter) {
       if (UpdateRefCount)
         ++HT.RefCount;
       long tp = HT.TgtPtrBegin + (hp - HT.HstPtrBegin);
