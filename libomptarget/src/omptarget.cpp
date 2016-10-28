@@ -155,7 +155,7 @@ struct DeviceTy {
   int32_t run_region(void *TgtEntryPtr, void **TgtVarsPtr, int32_t TgtVarsSize);
   int32_t run_team_region(void *TgtEntryPtr, void **TgtVarsPtr,
                           int32_t TgtVarsSize, int32_t NumTeams,
-                          int32_t ThreadLimit);
+                          int32_t ThreadLimit, uint64_t LoopTripCount);
 
 private:
   // call to RTL
@@ -173,7 +173,7 @@ struct RTLInfoTy {
   typedef int32_t(data_delete_ty)(int32_t, void *);
   typedef int32_t(run_region_ty)(int32_t, void *, void **, int32_t);
   typedef int32_t(run_team_region_ty)(int32_t, void *, void **, int32_t,
-                                      int32_t, int32_t);
+                                      int32_t, int32_t, uint64_t);
 
   int32_t Idx;                     // RTL index, index is the number of devices
                                    // of other RTLs that were registered before,
@@ -895,9 +895,9 @@ int32_t DeviceTy::run_region(void *TgtEntryPtr, void **TgtVarsPtr,
 // run team region on device.
 int32_t DeviceTy::run_team_region(void *TgtEntryPtr, void **TgtVarsPtr,
                                   int32_t TgtVarsSize, int32_t NumTeams,
-                                  int32_t ThreadLimit) {
+                                  int32_t ThreadLimit, uint64_t LoopTripCount) {
   return RTL->run_team_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtVarsSize,
-                              NumTeams, ThreadLimit);
+                              NumTeams, ThreadLimit, LoopTripCount);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1998,6 +1998,10 @@ static int target(int32_t device_id, void *host_ptr, int32_t arg_num,
   // Push omp handle.
   tgt_args.push_back((void *)0);
 
+  // Pop loop trip count
+  uint64_t ltc = Device.loopTripCnt;
+  Device.loopTripCnt = 0;
+
   // Launch device execution.
   int rc;
   DP("Launching target execution with pointer %016lx (index=%d).\n",
@@ -2005,7 +2009,7 @@ static int target(int32_t device_id, void *host_ptr, int32_t arg_num,
   if (IsTeamConstruct) {
     rc = Device.run_team_region(TargetTable->EntriesBegin[TM->Index].addr,
                                 &tgt_args[0], tgt_args.size(), team_num,
-                                thread_limit);
+                                thread_limit, ltc);
   } else {
     rc = Device.run_region(TargetTable->EntriesBegin[TM->Index].addr,
                            &tgt_args[0], tgt_args.size());
@@ -2144,6 +2148,12 @@ EXTERN void __kmpc_push_target_tripcount(int32_t device_id,
   if (device_id == OFFLOAD_DEVICE_DEFAULT) {
     device_id = omp_get_default_device();
   }
+
+  if (CheckDevice(device_id) != OFFLOAD_SUCCESS) {
+    DP("Failed to get device %d ready\n", device_id);
+    return;
+  }
+
   DP("__kmpc_push_target_tripcount(%d, %lu)\n", device_id, loop_tripcount);
   Devices[device_id].loopTripCnt = loop_tripcount;
 }

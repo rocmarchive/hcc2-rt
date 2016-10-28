@@ -47,6 +47,10 @@
   {}
 #endif
 
+// Implemented in libomp, they are called from within __tgt_rtl_* functions.
+int omp_get_thread_limit(void) __attribute__((weak));
+int omp_get_max_threads(void) __attribute__((weak));
+
 /// Account the memory allocated per device.
 struct AllocMemEntryTy {
   int64_t TotalSize;
@@ -70,7 +74,6 @@ enum ExecutionModeType {
 /// Use a single entity to encode a kernel and a set of flags
 struct KernelTy {
   CUfunction Func;
-  int SimdInfo;
 
   // execution mode of kernel
   // 0 - SPMD mode (without master warp)
@@ -82,9 +85,8 @@ struct KernelTy {
   CUdeviceptr ThreadLimitPtr;
   int ThreadLimit;
 
-  KernelTy(CUfunction _Func, int _SimdInfo, int8_t _ExecutionMode,
-           CUdeviceptr _ThreadLimitPtr)
-      : Func(_Func), SimdInfo(_SimdInfo), ExecutionMode(_ExecutionMode),
+  KernelTy(CUfunction _Func, int8_t _ExecutionMode, CUdeviceptr _ThreadLimitPtr)
+      : Func(_Func), ExecutionMode(_ExecutionMode),
         ThreadLimitPtr(_ThreadLimitPtr) {
     ThreadLimit = 0; // default (0) signals that it was not initialized
   };
@@ -102,10 +104,25 @@ public:
   int NumberOfDevices;
   std::vector<CUmodule> Modules;
   std::vector<CUcontext> Contexts;
+
+  // Device properties
   std::vector<int> ThreadsPerBlock;
   std::vector<int> BlocksPerGrid;
   std::vector<int> WarpSize;
-  const int HardThreadLimit = 1024;
+
+  // OpenMP properties
+  std::vector<int> NumTeams;
+  std::vector<int> NumThreads;
+
+  // OpenMP Environment properties
+  int EnvNumTeams;
+  int EnvTeamLimit;
+
+  //static int EnvNumThreads;
+  static const int HardTeamLimit = 1<<16; // 64k
+  static const int HardThreadLimit = 1024;
+  static const int DefaultNumTeams = 128;
+  static const int DefaultNumThreads = 1024;
 
   // Record entry point associated with device
   void addOffloadEntry(int32_t device_id, __tgt_offload_entry entry) {
@@ -190,6 +207,26 @@ public:
     ThreadsPerBlock.resize(NumberOfDevices);
     BlocksPerGrid.resize(NumberOfDevices);
     WarpSize.resize(NumberOfDevices);
+    NumTeams.resize(NumberOfDevices);
+    NumThreads.resize(NumberOfDevices);
+
+    // Get environment variables regarding teams
+    char *envStr = getenv("OMP_TEAM_LIMIT");
+    if (envStr) {
+      // OMP_TEAM_LIMIT has been set
+      EnvTeamLimit = std::stoi(envStr);
+      DP("Parsed OMP_TEAM_LIMIT=%d\n", EnvTeamLimit);
+    } else {
+      EnvTeamLimit = -1;
+    }
+    envStr = getenv("OMP_NUM_TEAMS");
+    if (envStr) {
+      // OMP_NUM_TEAMS has been set
+      EnvNumTeams = std::stoi(envStr);
+      DP("Parsed OMP_NUM_TEAMS=%d\n", EnvNumTeams);
+    } else {
+      EnvNumTeams = -1;
+    }
   }
 
   ~RTLDeviceInfoTy() {
@@ -291,27 +328,83 @@ int32_t __tgt_rtl_init_device(int32_t device_id) {
     return OFFLOAD_FAIL;
   }
 
-  // scan properties to determine number of threads/block per blocks/grid.
+  // scan properties to determine number of threads/block and blocks/grid.
   struct cudaDeviceProp Properties;
   cudaError_t error = cudaGetDeviceProperties(&Properties, device_id);
   if (error != cudaSuccess) {
     DP("Error getting device Properties, use defaults\n");
-    DeviceInfo.BlocksPerGrid[device_id] = 32;
-    DeviceInfo.ThreadsPerBlock[device_id] = 512;
+    DeviceInfo.BlocksPerGrid[device_id] = RTLDeviceInfoTy::DefaultNumTeams;
+    DeviceInfo.ThreadsPerBlock[device_id] = RTLDeviceInfoTy::DefaultNumThreads;
     DeviceInfo.WarpSize[device_id] = 32;
   } else {
-    DeviceInfo.BlocksPerGrid[device_id] = Properties.multiProcessorCount;
-    // exploit threads only along x axis
-    DeviceInfo.ThreadsPerBlock[device_id] = Properties.maxThreadsDim[0];
-    if (Properties.maxThreadsDim[0] < Properties.maxThreadsPerBlock) {
-      DP("use up to %d threads, fewer than max per blocks along xyz %d\n",
-         Properties.maxThreadsDim[0], Properties.maxThreadsPerBlock);
+    // Get blocks per grid
+    if (Properties.maxGridSize[0] <= RTLDeviceInfoTy::HardTeamLimit) {
+      DeviceInfo.BlocksPerGrid[device_id] = Properties.maxGridSize[0];
+      DP("Using %d CUDA blocks per grid\n", Properties.maxGridSize[0]);
+    } else {
+      DeviceInfo.BlocksPerGrid[device_id] = RTLDeviceInfoTy::HardTeamLimit;
+      DP("Max CUDA blocks per grid %d exceeds the hard team limit %d, capping "
+          "at the hard limit\n", Properties.maxGridSize[0],
+          RTLDeviceInfoTy::HardTeamLimit);
     }
+
+    // Get threads per block, exploit threads only along x axis
+    if (Properties.maxThreadsDim[0] <= RTLDeviceInfoTy::HardThreadLimit) {
+      DeviceInfo.ThreadsPerBlock[device_id] = Properties.maxThreadsDim[0];
+      DP("Using %d CUDA threads per block\n", Properties.maxThreadsDim[0]);
+      if (Properties.maxThreadsDim[0] < Properties.maxThreadsPerBlock) {
+        DP("(fewer than max per block along all xyz dims %d)\n",
+            Properties.maxThreadsPerBlock);
+      }
+    } else {
+      DeviceInfo.ThreadsPerBlock[device_id] = RTLDeviceInfoTy::HardThreadLimit;
+      DP("Max CUDA threads per block %d exceeds the hard thread limit %d, "
+          "capping at the hard limt\n", Properties.maxThreadsDim[0],
+          RTLDeviceInfoTy::HardThreadLimit);
+    }
+
+    // Get warp size
     DeviceInfo.WarpSize[device_id] = Properties.warpSize;
   }
-  DP("Default number of blocks %d, threads %d & warp size %d\n",
+
+  // Adjust teams to the env variables
+  if (DeviceInfo.EnvTeamLimit > 0 &&
+      DeviceInfo.BlocksPerGrid[device_id] > DeviceInfo.EnvTeamLimit) {
+    DeviceInfo.BlocksPerGrid[device_id] = DeviceInfo.EnvTeamLimit;
+    DP("Capping max CUDA blocks per grid to OMP_TEAM_LIMIT=%d\n",
+        DeviceInfo.EnvTeamLimit);
+  }
+
+  DP("Max number of CUDA blocks %d, threads %d & warp size %d\n",
      DeviceInfo.BlocksPerGrid[device_id], DeviceInfo.ThreadsPerBlock[device_id],
      DeviceInfo.WarpSize[device_id]);
+
+  // Set default number of teams
+  if (DeviceInfo.EnvNumTeams > 0) {
+    DeviceInfo.NumTeams[device_id] = DeviceInfo.EnvNumTeams;
+    DP("Default number of teams set according to environment %d\n",
+        DeviceInfo.EnvNumTeams);
+  } else {
+    DeviceInfo.NumTeams[device_id] = RTLDeviceInfoTy::DefaultNumTeams;
+    DP("Default number of teams set according to library's default %d\n",
+        RTLDeviceInfoTy::DefaultNumTeams);
+  }
+  if (DeviceInfo.NumTeams[device_id] > DeviceInfo.BlocksPerGrid[device_id]) {
+    DeviceInfo.NumTeams[device_id] = DeviceInfo.BlocksPerGrid[device_id];
+    DP("Default number of teams exceeds device limit, capping at %d\n",
+        DeviceInfo.BlocksPerGrid[device_id]);
+  }
+
+  // Set default number of threads
+  DeviceInfo.NumThreads[device_id] = RTLDeviceInfoTy::DefaultNumThreads;
+  DP("Default number of threads set according to library's default %d\n",
+          RTLDeviceInfoTy::DefaultNumThreads);
+  if (DeviceInfo.NumThreads[device_id] >
+      DeviceInfo.ThreadsPerBlock[device_id]) {
+    DeviceInfo.NumTeams[device_id] = DeviceInfo.ThreadsPerBlock[device_id];
+    DP("Default number of threads exceeds device limit, capping at %d\n",
+        DeviceInfo.ThreadsPerBlock[device_id]);
+  }
 
   return OFFLOAD_SUCCESS;
 }
@@ -403,68 +496,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
 
     DP("Entry point %ld maps to %s (%016lx)\n", e - HostBegin, e->name,
        (Elf64_Addr)fun);
-#ifdef OLD_SCHEME
-    // default value.
-    int8_t SimdInfoVal = 1;
 
-    // obtain and save simd_info value for target region.
-    const char suffix[] = "_simd_info";
-    char *SimdInfoName =
-        (char *)malloc((strlen(e->name) + strlen(suffix)) * sizeof(char));
-    sprintf(SimdInfoName, "%s%s", e->name, suffix);
-
-    CUdeviceptr SimdInfoPtr;
-    size_t cusize;
-    err = cuModuleGetGlobal(&SimdInfoPtr, &cusize, cumod, SimdInfoName);
-    if (err == CUDA_SUCCESS) {
-      if ((int32_t)cusize != sizeof(int8_t)) {
-        DP("loading global simd_info '%s' - size mismatch (%lld != %lld)\n",
-           SimdInfoName, (unsigned long long)cusize,
-           (unsigned long long)sizeof(int8_t));
-        CUDA_ERR_STRING(err);
-        return NULL;
-      }
-
-      err = cuMemcpyDtoH(&SimdInfoVal, (CUdeviceptr)SimdInfoPtr, cusize);
-      if (err != CUDA_SUCCESS) {
-        DP("Error when copying data from device to host. Pointers: "
-           "host = 0x%016lx, device = 0x%016lx, size = %lld\n",
-           (Elf64_Addr)&SimdInfoVal, (Elf64_Addr)SimdInfoPtr,
-           (unsigned long long)cusize);
-        CUDA_ERR_STRING(err);
-        return NULL;
-      }
-      if (SimdInfoVal < 1) {
-        DP("Error wrong simd_info value specified in cubin file: %d\n",
-           SimdInfoVal);
-        return NULL;
-      }
-    }
-
-    // obtain cuda pointer to global tracking thread limit.
-    const char SuffixTL[] = "_thread_limit";
-    char *ThreadLimitName =
-        (char *)malloc((strlen(e->name) + strlen(SuffixTL)) * sizeof(char));
-    sprintf(ThreadLimitName, "%s%s", e->name, SuffixTL);
-
-    CUdeviceptr ThreadLimitPtr;
-    err = cuModuleGetGlobal(&ThreadLimitPtr, &cusize, cumod, ThreadLimitName);
-    if (err != CUDA_SUCCESS) {
-      DP("Error retrieving pointer for %s global\n", ThreadLimitName);
-      CUDA_ERR_STRING(err);
-      return NULL;
-    }
-    if ((int32_t)cusize != sizeof(int32_t)) {
-      DP("loading global thread_limit '%s' - size mismatch (%lld != %lld)\n",
-         ThreadLimitName, (unsigned long long)cusize,
-         (unsigned long long)sizeof(int32_t));
-      CUDA_ERR_STRING(err);
-      return NULL;
-    }
-    // encode function and kernel.
-    KernelsList.push_back(KernelTy(fun, SimdInfoVal, /*ExecMode=*/0,
-        ThreadLimitPtr));
-#else
     // default value GENERIC (in case symbol is missing from cubin file)
     int8_t ExecModeVal = ExecutionModeType::GENERIC;
     const char suffix[] = "_exec_mode";
@@ -506,9 +538,9 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
       CUDA_ERR_STRING(err);
     }
 
-    KernelsList.push_back(KernelTy(fun, /*SimdInfoVal=*/1, ExecModeVal,
+    KernelsList.push_back(KernelTy(fun, ExecModeVal,
         /*ThreadLimitPtr=*/CUdeviceptr()));
-#endif
+
     __tgt_offload_entry entry = *e;
     entry.addr = (void *)&KernelsList.back();
     DeviceInfo.addOffloadEntry(device_id, entry);
@@ -600,7 +632,8 @@ int32_t __tgt_rtl_data_delete(int32_t device_id, void *tgt_ptr) {
 }
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
-    void **tgt_args, int32_t arg_num, int32_t team_num, int32_t thread_limit) {
+    void **tgt_args, int32_t arg_num, int32_t team_num, int32_t thread_limit,
+    uint64_t loop_tripcount) {
   // Set the context we are using.
   CUresult err = cuCtxSetCurrent(DeviceInfo.Contexts[device_id]);
   if (err != CUDA_SUCCESS) {
@@ -617,16 +650,28 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 
   KernelTy *KernelInfo = (KernelTy *)tgt_entry_ptr;
 
-  int cudaThreadsPerBlock = (thread_limit <= 0 || thread_limit *
-      KernelInfo->SimdInfo > DeviceInfo.ThreadsPerBlock[device_id]) ?
-      DeviceInfo.ThreadsPerBlock[device_id] :
-      thread_limit * KernelInfo->SimdInfo;
-#ifndef OLD_SCHEME
-  if (KernelInfo->ExecutionMode == GENERIC)
+  int cudaThreadsPerBlock;
+
+  if (thread_limit > 0) {
+    cudaThreadsPerBlock = thread_limit;
+    DP("Set CUDA threads per block to requested %d\n", thread_limit);
+  } else {
+    cudaThreadsPerBlock = DeviceInfo.NumThreads[device_id];
+    DP("Set CUDA threads per block to default %d\n",
+        DeviceInfo.NumThreads[device_id]);
+  }
+
+  // Add master warp if necessary
+  if (KernelInfo->ExecutionMode == GENERIC) {
     cudaThreadsPerBlock += DeviceInfo.WarpSize[device_id];
-#endif
-  if (cudaThreadsPerBlock > DeviceInfo.HardThreadLimit)
-    cudaThreadsPerBlock = DeviceInfo.HardThreadLimit;
+    DP("Adding master warp: +%d threads\n", DeviceInfo.WarpSize[device_id]);
+  }
+
+  if (cudaThreadsPerBlock > DeviceInfo.ThreadsPerBlock[device_id]) {
+    cudaThreadsPerBlock = DeviceInfo.ThreadsPerBlock[device_id];
+    DP("Threads per block capped at device limit %d\n",
+        DeviceInfo.ThreadsPerBlock[device_id]);
+  }
 
   int kernel_limit;
   err = cuFuncGetAttribute(&kernel_limit,
@@ -634,38 +679,37 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   if (err == CUDA_SUCCESS) {
     if (kernel_limit < cudaThreadsPerBlock) {
       cudaThreadsPerBlock = kernel_limit;
+      DP("Threads per block capped at kernel limit %d\n", kernel_limit);
     }
   }
 
-#ifdef OLD_SCHEME
-  // update thread limit content in gpu memory if un-initialized or changed.
-  if (KernelInfo->ThreadLimit == 0 || KernelInfo->ThreadLimit != thread_limit) {
-    // always capped by maximum number of threads in a block: even if 1 OMP
-    // thread is 1 independent CUDA thread, we may have up to max block size OMP
-    // threads if the user request thread_limit(tl) with tl > max block size, we
-    // only start max block size CUDA threads.
-    if (thread_limit > DeviceInfo.ThreadsPerBlock[device_id])
-      thread_limit = DeviceInfo.ThreadsPerBlock[device_id];
-
-    KernelInfo->ThreadLimit = thread_limit;
-    err = cuMemcpyHtoD(KernelInfo->ThreadLimitPtr, &thread_limit,
-                       sizeof(int32_t));
-
-    if (err != CUDA_SUCCESS) {
-      DP("Error when setting thread limit global\n");
-      return OFFLOAD_FAIL;
+  int cudaBlocksPerGrid;
+  if (team_num <= 0) {
+    if (loop_tripcount > 0 && DeviceInfo.EnvNumTeams < 0) {
+      // round up to the nearest integer
+      cudaBlocksPerGrid = ((loop_tripcount - 1) / cudaThreadsPerBlock) + 1;
+      DP("Using %d teams due to loop trip count %lu and number of threads per "
+          "block %d\n", cudaBlocksPerGrid, loop_tripcount, cudaThreadsPerBlock);
+    } else {
+      cudaBlocksPerGrid = DeviceInfo.NumTeams[device_id];
+      DP("Using default number of teams %d\n", DeviceInfo.NumTeams[device_id]);
     }
+  } else if (team_num > DeviceInfo.BlocksPerGrid[device_id]) {
+    cudaBlocksPerGrid = DeviceInfo.BlocksPerGrid[device_id];
+    DP("Capping number of teams to team limit %d\n",
+        DeviceInfo.BlocksPerGrid[device_id]);
+  } else {
+    cudaBlocksPerGrid = team_num;
+    DP("Using requested number of teams %d\n", team_num);
   }
-#endif
-  int blocksPerGrid =
-      team_num > 0 ? team_num : DeviceInfo.BlocksPerGrid[device_id];
+
   int nshared = 0;
 
   // Run on the device.
-  DP("launch kernel with %d blocks and %d threads\n", blocksPerGrid,
+  DP("launch kernel with %d blocks and %d threads\n", cudaBlocksPerGrid,
      cudaThreadsPerBlock);
 
-  err = cuLaunchKernel(KernelInfo->Func, blocksPerGrid, 1, 1,
+  err = cuLaunchKernel(KernelInfo->Func, cudaBlocksPerGrid, 1, 1,
                        cudaThreadsPerBlock, 1, 1, nshared, 0, &args[0], 0);
   if (err != CUDA_SUCCESS) {
     DP("Device kernel launching failed!\n");
@@ -686,7 +730,7 @@ int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
   int32_t team_num = 1;
   int32_t thread_limit = 0; // use default.
   return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-                                          arg_num, team_num, thread_limit);
+                                          arg_num, team_num, thread_limit, 0);
 }
 
 #ifdef __cplusplus
