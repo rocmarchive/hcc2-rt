@@ -258,6 +258,15 @@ public:
 };
 
 void RTLsTy::LoadRTLs() {
+  // Parse environment variable OMP_TARGET_OFFLOAD (if set)
+  char *envStr = getenv("OMP_TARGET_OFFLOAD");
+  if (envStr) {
+    if (!strcmp(envStr, "DISABLED")) {
+      DP("Target offloading disabled by environment\n");
+      return;
+    }
+  }
+
   // Attempt to open all the plugins and, if they exist, check if the interface
   // is correct and if they are supporting any devices.
   for (auto *Name : RTLNames) {
@@ -1010,8 +1019,10 @@ EXTERN void __tgt_register_lib(__tgt_bin_desc *desc) {
     }
 
     // if an RTL was found we are done - proceed to register the next image
-    if (!FoundRTL)
+    if (!FoundRTL) {
       DP("No RTL found for image %016lx!\n", (long)img->ImageStart);
+      continue;
+    }
 
     // Load ctors/dtors for static objects
     for (int32_t i = 0; i < FoundRTL->NumberOfDevices; ++i) {

@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "../utilities/check.h"
+
 /*
 export "LD_LIBRARY_PATH=/gsa/yktgsa/home/e/i/eichen/new-tlomp/lomp/source/lib64:/usr/local/cuda/lib64"
 export LIBRARY_PATH="/home/eichen/eichen/lnew/obj/lib"
@@ -38,12 +40,19 @@ int  main()
     }
     A[i] = 2*i;
   }  
-  if (numFromEnv) {
-    CHECK("test1, teams", teams1, numFromEnv);
+
+
+  if (offloading_disabled()) {
+    CHECK("test1, teams", teams1, omp_get_num_teams());
+    CHECK("test1, threads", threads1, omp_get_max_threads());
   } else {
-    CHECK("test1, teams", teams1, N/1024);
+    if (numFromEnv) {
+      CHECK("test1, teams", teams1, numFromEnv);
+    } else {
+      CHECK("test1, teams", teams1, N/1024);
+    }
+    CHECK("test1, threads", threads1, 1024);
   }
-  CHECK("test1, threads", threads1, 1024);
   printf("  completed\n");
 
   printf("test 2: use iteration trip count with 512 threads\n");
@@ -56,17 +65,21 @@ int  main()
       if (DEBUG) printf("  num teams %d, num thread %d\n", teams2, threads2);
     }
     A[i] += 2*i;
-  }  
-  if (numFromEnv) {
-    CHECK("test2, teams", teams2, numFromEnv);
-  } else {
-    CHECK("test2, teams", teams2, N/512);
   }
 
+  if (offloading_disabled()) {
+    CHECK("test2, teams", teams2, omp_get_num_teams());
+  } else {
+    if (numFromEnv) {
+      CHECK("test2, teams", teams2, numFromEnv);
+    } else {
+      CHECK("test2, teams", teams2, N/512);
+    }
+  }
   CHECK("test2, threads", threads2, 512);
   printf("  completed\n");
 
-  printf("test 2: use iteration trip count with 25 teams & 512 threads\n");
+  printf("test 3: use iteration trip count with 25 teams & 512 threads\n");
   int teams3, threads3;
   #pragma omp target teams distribute parallel for map(teams3, threads3) num_teams(25) thread_limit(512)
   for(int i=0; i<N; i++) {
