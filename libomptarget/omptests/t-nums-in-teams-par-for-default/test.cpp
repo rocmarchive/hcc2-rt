@@ -43,8 +43,8 @@ int  main()
 
 
   if (offloading_disabled()) {
-    CHECK("test1, teams", teams1, omp_get_num_teams());
-    CHECK("test1, threads", threads1, omp_get_max_threads());
+    CHECK("test1, teams", teams1, 192);
+    CHECK("test1, threads", threads1, 1);
   } else {
     if (numFromEnv) {
       CHECK("test1, teams", teams1, numFromEnv);
@@ -68,15 +68,17 @@ int  main()
   }
 
   if (offloading_disabled()) {
-    CHECK("test2, teams", teams2, omp_get_num_teams());
+    CHECK("test2, teams", teams2, 192);
+    CHECK("test2, threads", threads2, 1);
   } else {
     if (numFromEnv) {
       CHECK("test2, teams", teams2, numFromEnv);
     } else {
       CHECK("test2, teams", teams2, N/512);
     }
+    CHECK("test2, threads", threads2, 512);
   }
-  CHECK("test2, threads", threads2, 512);
+  
   printf("  completed\n");
 
   printf("test 3: use iteration trip count with 25 teams & 512 threads\n");
@@ -90,8 +92,14 @@ int  main()
     }
     A[i] += 2*i;
   }  
+  
   CHECK("test3, teams", teams3, 25);
-  CHECK("test4, threads", threads3, 512);
+  
+  if (offloading_disabled()) {
+    CHECK("test4, threads", threads3, 1);
+  } else {
+    CHECK("test4, threads", threads3, 512);
+  }
   printf("  completed\n");
 
   printf("tests completed with %d errors\n", error);
