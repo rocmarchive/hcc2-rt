@@ -66,6 +66,18 @@ struct HostDataToTargetTy {
 
 typedef std::list<HostDataToTargetTy> HostDataToTargetListTy;
 
+struct LookupResult {
+  struct {
+    unsigned IsContained   : 1;
+    unsigned ExtendsBefore : 1;
+    unsigned ExtendsAfter  : 1;
+  } Flags;
+
+  HostDataToTargetListTy::iterator Entry;
+
+  LookupResult() : Flags({0,0,0}), Entry(0) {}
+};
+
 /// Map for shadow pointers
 struct ShadowPtrValTy {
   void *HstPtrVal;
@@ -135,15 +147,17 @@ struct DeviceTy {
     return *this;
   }
 
+  HostDataToTargetTy *getMapEntry(void *HstPtrBegin);
+  LookupResult lookupMapping(void *HstPtrBegin, long Size);
   void *getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
-                         long &IsNew, long UpdateRefCount = true);
+                         long &IsNew, long IsImplicit,
+                         long UpdateRefCount = true);
   void *getTgtPtrBegin(void *HstPtrBegin, long Size);
   void *getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
-                       long UpdateRefCount = true);
+                       long UpdateRefCount);
   void deallocTgtPtr(void *TgtPtrBegin, long Size, long ForceDelete);
   int associatePtr(void *HstPtrBegin, void *TgtPtrBegin, long Size);
   int disassociatePtr(void *HstPtrBegin);
-  HostDataToTargetTy *getMapEntry(void *HstPtrBegin);
 
   // calls to RTL
   int32_t initOnce();
@@ -719,128 +733,7 @@ int DeviceTy::disassociatePtr(void *HstPtrBegin) {
   return OFFLOAD_FAIL;
 }
 
-// return the target pointer begin (where the data will be moved).
-// lock-free version called from within assertions
-void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size) {
-  long hp = (long)HstPtrBegin;
-  for (auto &HT : HostDataToTargetMap) {
-    if (hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd) {
-      long tp = HT.TgtPtrBegin + (hp - HT.HstPtrBegin);
-      return (void *)tp;
-    }
-  }
-  return NULL;
-}
-
-// return the target pointer begin (where the data will be moved).
-void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
-                               long UpdateRefCount) {
-  long hp = (long)HstPtrBegin;
-  IsLast = false;
-
-  DataMapMtx.lock();
-  for (auto &HT : HostDataToTargetMap) {
-    bool isContained = hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd;
-    bool extendsBefore = hp < HT.HstPtrBegin && (hp + Size) > HT.HstPtrBegin;
-    bool extendsAfter = isContained && (hp + Size) > HT.HstPtrEnd;
-    if (extendsBefore) {
-      DP("WARNING: Pointer is not mapped but section extends into already "
-          "mapped region\n");
-    }
-    if (extendsAfter) {
-      DP("WARNING: Pointer is already mapped but section extends beyond mapped "
-          "region \n");
-    }
-    if (isContained || extendsBefore || extendsAfter) {
-      IsLast = !(HT.RefCount > 1);
-
-      if (HT.RefCount > 1 && UpdateRefCount)
-        --HT.RefCount;
-
-      long tp = HT.TgtPtrBegin + (hp - HT.HstPtrBegin);
-      DataMapMtx.unlock();
-      return (void *)tp;
-    }
-  }
-  DataMapMtx.unlock();
-
-  return NULL;
-}
-
-// return the target pointer begin (where the data will be moved).
-void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
-                                 long &IsNew, long UpdateRefCount) {
-  long hp = (long)HstPtrBegin;
-  IsNew = false;
-
-  // Check if the pointer is contained.
-  DataMapMtx.lock();
-  for (auto &HT : HostDataToTargetMap) {
-    // Is it contained?
-    bool isContained = hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd;
-    // Does it extend into an already mapped region?
-    bool extendsBefore = hp < HT.HstPtrBegin && (hp + Size) > HT.HstPtrBegin;
-    // Does it extend beyond the mapped region?
-    bool extendsAfter = isContained && (hp + Size) > HT.HstPtrEnd;
-    if (extendsBefore) {
-      DP("WARNING: Pointer is not mapped but section extends into already "
-          "mapped data\n");
-    }
-    if (extendsAfter) {
-      DP("WARNING: Pointer is already mapped but section extends beyond mapped "
-          "region\n");
-    }
-    if (isContained || extendsBefore || extendsAfter) {
-      if (UpdateRefCount)
-        ++HT.RefCount;
-      long tp = HT.TgtPtrBegin + (hp - HT.HstPtrBegin);
-      DataMapMtx.unlock();
-      return (void *)tp;
-    }
-  }
-
-  // If it is not contained we should create a new entry for it.
-  IsNew = true;
-  long tp = (long)RTL->data_alloc(RTLDeviceID, Size);
-  HostDataToTargetMap.push_front(
-      HostDataToTargetTy((long)HstPtrBase, hp, hp + Size, tp));
-  DataMapMtx.unlock();
-  return (void *)tp;
-}
-
-void DeviceTy::deallocTgtPtr(void *HstPtrBegin, long Size, long ForceDelete) {
-  long hp = (long)HstPtrBegin;
-
-  // Check if the pointer is contained in any sub-nodes.
-  DataMapMtx.lock();
-  for (auto ii = HostDataToTargetMap.begin(), ie = HostDataToTargetMap.end();
-       ii != ie; ++ii) {
-    auto &HT = *ii;
-    // Is it contained?
-    if (hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd) {
-      if ((hp + Size) > HT.HstPtrEnd) {
-        DP("WARNING: Array contains pointer but does not contain the complete "
-           "section\n");
-      }
-      if (ForceDelete)
-        HT.RefCount = 1;
-      if (--HT.RefCount <= 0) {
-        assert(HT.RefCount == 0 && "did not expect a negative ref count");
-        DP("Deleting tgt data 0x%016llx of size %lld\n",
-           (long long)HT.TgtPtrBegin, (long long)Size);
-        RTL->data_delete(RTLDeviceID, (void *)HT.TgtPtrBegin);
-        HostDataToTargetMap.erase(ii);
-      }
-      DataMapMtx.unlock();
-      return;
-    }
-  }
-  DataMapMtx.unlock();
-  DP("Section to delete (hst addr 0x%llx) does not exist in the allocated "
-     "memory\n",
-     (unsigned long long)hp);
-}
-
+// Get map entry containing HstPtrBegin
 HostDataToTargetTy *DeviceTy::getMapEntry(void *HstPtrBegin) {
   long hp = (long)HstPtrBegin;
   for (auto &HT : HostDataToTargetMap) {
@@ -849,6 +742,137 @@ HostDataToTargetTy *DeviceTy::getMapEntry(void *HstPtrBegin) {
     }
   }
   return NULL;
+}
+
+LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, long Size) {
+  long hp = (long)HstPtrBegin;
+  LookupResult lr;
+
+  for (lr.Entry = HostDataToTargetMap.begin();
+      lr.Entry != HostDataToTargetMap.end(); ++lr.Entry) {
+    auto &HT = *lr.Entry;
+    // Is it contained?
+    lr.Flags.IsContained = hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd &&
+        (hp+Size) <= HT.HstPtrEnd;
+    // Does it extend into an already mapped region?
+    lr.Flags.ExtendsBefore = hp < HT.HstPtrBegin && (hp+Size) > HT.HstPtrBegin;
+    // Does it extend beyond the mapped region?
+    lr.Flags.ExtendsAfter = hp < HT.HstPtrEnd && (hp+Size) > HT.HstPtrEnd;
+
+    if (lr.Flags.ExtendsBefore) {
+      DP("WARNING: Pointer is not mapped but section extends into already "
+          "mapped data\n");
+    }
+    if (lr.Flags.ExtendsAfter) {
+      DP("WARNING: Pointer is already mapped but section extends beyond mapped "
+          "region\n");
+    }
+
+    if (lr.Flags.IsContained || lr.Flags.ExtendsBefore ||
+        lr.Flags.ExtendsAfter) {
+      break;
+    }
+  }
+
+  return lr;
+}
+
+// Used by target_data_begin
+// Return the target pointer begin (where the data will be moved).
+// Allocate memory if this is the first occurrence if this mapping.
+// Increment the reference counter.
+void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
+                                 long &IsNew, long IsImplicit,
+                                 long UpdateRefCount) {
+  // Check if the pointer is contained.
+  DataMapMtx.lock();
+  LookupResult lr = lookupMapping(HstPtrBegin, Size);
+  if (lr.Flags.IsContained ||
+      ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && IsImplicit)) {
+    auto &HT = *lr.Entry;
+    IsNew = false;
+
+    if (UpdateRefCount)
+      ++HT.RefCount;
+
+    long tp = HT.TgtPtrBegin + ((long)HstPtrBegin - HT.HstPtrBegin);
+    DataMapMtx.unlock();
+    return (void *)tp;
+  } else if ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && !IsImplicit) {
+    DP("Explicit extension of mapping is not allowed.\n");
+    DataMapMtx.unlock();
+    return NULL;
+  }
+
+  // If it is not contained we should create a new entry for it.
+  IsNew = true;
+  long tp = (long)RTL->data_alloc(RTLDeviceID, Size);
+  HostDataToTargetMap.push_front(HostDataToTargetTy((long)HstPtrBase,
+      (long)HstPtrBegin, (long)HstPtrBegin + Size, tp));
+  DataMapMtx.unlock();
+  return (void *)tp;
+}
+
+// Used by target_data_end, target_data_update and target.
+// Return the target pointer begin (where the data will be moved).
+// Decrement the reference counter if called from target_data_end.
+void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
+                               long UpdateRefCount) {
+  DataMapMtx.lock();
+  LookupResult lr = lookupMapping(HstPtrBegin, Size);
+  if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
+    auto &HT = *lr.Entry;
+    IsLast = !(HT.RefCount > 1);
+
+    if (HT.RefCount > 1 && UpdateRefCount)
+      --HT.RefCount;
+
+    long tp = HT.TgtPtrBegin + ((long)HstPtrBegin - HT.HstPtrBegin);
+    DataMapMtx.unlock();
+    return (void *)tp;
+  }
+  DataMapMtx.unlock();
+
+  IsLast = false;
+  return NULL;
+}
+
+// Return the target pointer begin (where the data will be moved).
+// Lock-free version called from within assertions.
+void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size) {
+  long hp = (long)HstPtrBegin;
+  LookupResult lr = lookupMapping(HstPtrBegin, Size);
+  if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
+    auto &HT = *lr.Entry;
+    long tp = HT.TgtPtrBegin + (hp - HT.HstPtrBegin);
+    return (void *)tp;
+  }
+
+  return NULL;
+}
+
+void DeviceTy::deallocTgtPtr(void *HstPtrBegin, long Size, long ForceDelete) {
+  // Check if the pointer is contained in any sub-nodes.
+  DataMapMtx.lock();
+  LookupResult lr = lookupMapping(HstPtrBegin, Size);
+  if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
+    auto &HT = *lr.Entry;
+    if (ForceDelete)
+      HT.RefCount = 1;
+    if (--HT.RefCount <= 0) {
+      assert(HT.RefCount == 0 && "did not expect a negative ref count");
+      DP("Deleting tgt data 0x%016llx of size %lld\n",
+         (long long)HT.TgtPtrBegin, (long long)Size);
+      RTL->data_delete(RTLDeviceID, (void *)HT.TgtPtrBegin);
+      HostDataToTargetMap.erase(lr.Entry);
+    }
+    DataMapMtx.unlock();
+    return;
+  }
+
+  DataMapMtx.unlock();
+  DP("Section to delete (hst addr 0x%llx) does not exist in the allocated "
+     "memory\n", (unsigned long long)HstPtrBegin);
 }
 
 // init device.
@@ -1530,12 +1554,13 @@ static void target_data_begin(DeviceTy &Device, int32_t arg_num,
     // Address of pointer on the host and device, respectively.
     void *Pointer_HstPtrBegin, *Pointer_TgtPtrBegin;
     long IsNew, Pointer_IsNew;
+    long IsImplicit = arg_types[i] & OMP_TGT_MAPTYPE_IMPLICIT;
     long UpdateRef = !(arg_types[i] & OMP_TGT_MAPTYPE_MEMBER_OF);
     if (arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ) {
       DP("has a pointer entry: \n");
       // base is address of pointer.
       Pointer_TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBase, HstPtrBase,
-          sizeof(void *), Pointer_IsNew, UpdateRef);
+          sizeof(void *), Pointer_IsNew, IsImplicit, UpdateRef);
       DP("There are %ld bytes allocated at target address %016lx - is new %ld"
           "\n", (long)sizeof(void *), (long)Pointer_TgtPtrBegin, Pointer_IsNew);
       assert(Pointer_TgtPtrBegin &&
@@ -1547,7 +1572,7 @@ static void target_data_begin(DeviceTy &Device, int32_t arg_num,
     }
 
     void *TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBegin, HstPtrBase,
-        arg_sizes[i], IsNew, UpdateRef);
+        arg_sizes[i], IsNew, IsImplicit, UpdateRef);
     DP("There are %ld bytes allocated at target address %016lx - is new %ld"
         "\n", (long)arg_sizes[i], (long)TgtPtrBegin, IsNew);
     assert((TgtPtrBegin || !arg_sizes[i]) &&
@@ -1980,6 +2005,9 @@ static int target(int32_t device_id, void *host_ptr, int32_t arg_num,
           (long)HstPtrBase);
       TgtPtrBase = HstPtrBase;
     } else if (arg_types[i] & OMP_TGT_MAPTYPE_PRIVATE) {
+      DP("Allocated %ld bytes of target memory for %sprivate array "
+          "%016lx\n", arg_sizes[i], arg_types[i] & OMP_TGT_MAPTYPE_TO ?
+          "first-" : "", (long)HstPtrBegin);
       // Allocate memory for (first-)private array
       void *TgtPtrBegin = Device.RTL->data_alloc(Device.RTLDeviceID,
           arg_sizes[i]);
