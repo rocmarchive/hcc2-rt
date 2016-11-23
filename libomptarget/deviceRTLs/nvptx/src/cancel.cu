@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptx.h"
+#include "omptarget-nvptx.h"
 
 EXTERN int32_t __kmpc_cancellationpoint(kmp_Indent *loc, int32_t global_tid,
                                         int32_t cancelVal) {

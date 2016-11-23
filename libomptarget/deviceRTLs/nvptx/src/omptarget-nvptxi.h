@@ -23,7 +23,7 @@ INLINE omp_sched_t omptarget_nvptx_TaskDescr::GetRuntimeSched() {
 }
 
 INLINE void omptarget_nvptx_TaskDescr::SetRuntimeSched(omp_sched_t sched) {
-  // sched starts from 1..4; encode it as 0..3; so add 1 here
+  // sched starts from 1..4; encode it as 0..3; so sub 1 here
   uint8_t val = ((uint8_t)sched) - 1;
   // clear current sched
   data.items.flags &= ~TaskDescr_SchedMask;

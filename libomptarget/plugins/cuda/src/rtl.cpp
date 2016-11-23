@@ -11,17 +11,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <assert.h>
-#include <cstdio>
+#include <cassert>
+#include <cstddef>
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 #include <libelf.h>
 #include <list>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string>
-#include <string.h>
 #include <vector>
 
 #include "omptarget.h"
@@ -46,10 +42,6 @@
 #define CUDA_ERR_STRING(err)                                                   \
   {}
 #endif
-
-// Implemented in libomp, they are called from within __tgt_rtl_* functions.
-int omp_get_thread_limit(void) __attribute__((weak));
-int omp_get_max_threads(void) __attribute__((weak));
 
 /// Account the memory allocated per device.
 struct AllocMemEntryTy {
@@ -139,8 +131,8 @@ public:
            "Unexpected device id!");
     FuncOrGblEntryTy &E = FuncGblEntries[device_id];
 
-    for (unsigned i = 0; i < E.Entries.size(); ++i) {
-      if (E.Entries[i].addr == addr)
+    for (auto &it : E.Entries) {
+      if (it.addr == addr)
         return true;
     }
 
@@ -231,9 +223,9 @@ public:
 
   ~RTLDeviceInfoTy() {
     // Close modules
-    for (unsigned i = 0; i < Modules.size(); ++i)
-      if (Modules[i]) {
-        CUresult err = cuModuleUnload(Modules[i]);
+    for (auto &module : Modules)
+      if (module) {
+        CUresult err = cuModuleUnload(module);
         if (err != CUDA_SUCCESS) {
           DP("Error when unloading CUDA module\n");
           CUDA_ERR_STRING(err);
@@ -241,9 +233,9 @@ public:
       }
 
     // Destroy contexts
-    for (unsigned i = 0; i < Contexts.size(); ++i)
-      if (Contexts[i]) {
-        CUresult err = cuCtxDestroy(Contexts[i]);
+    for (auto &ctx : Contexts)
+      if (ctx) {
+        CUresult err = cuCtxDestroy(ctx);
         if (err != CUDA_SUCCESS) {
           DP("Error when destroying CUDA context\n");
           CUDA_ERR_STRING(err);
@@ -359,7 +351,7 @@ int32_t __tgt_rtl_init_device(int32_t device_id) {
     } else {
       DeviceInfo.ThreadsPerBlock[device_id] = RTLDeviceInfoTy::HardThreadLimit;
       DP("Max CUDA threads per block %d exceeds the hard thread limit %d, "
-          "capping at the hard limt\n", Properties.maxThreadsDim[0],
+          "capping at the hard limit\n", Properties.maxThreadsDim[0],
           RTLDeviceInfoTy::HardThreadLimit);
     }
 
@@ -410,7 +402,7 @@ int32_t __tgt_rtl_init_device(int32_t device_id) {
 }
 
 __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
-                                          __tgt_device_image *image) {
+    __tgt_device_image *image) {
 
   // Set the context we are using.
   CUresult err = cuCtxSetCurrent(DeviceInfo.Contexts[device_id]);
@@ -426,7 +418,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   // Create the module and extract the function pointers.
 
   CUmodule cumod;
-  DP("load data from image %llx\n", (unsigned long long)image->ImageStart);
+  DP("Load data from image " DPxMOD "\n", DPxPTR(image->ImageStart));
   err = cuModuleLoadDataEx(&cumod, image->ImageStart, 0, NULL, NULL);
   if (err != CUDA_SUCCESS) {
     DP("Error when loading CUDA module\n");
@@ -444,19 +436,14 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   for (__tgt_offload_entry *e = HostBegin; e != HostEnd; ++e) {
 
     if (!e->addr) {
-      // FIXME: Probably we should fail when something like this happens, the
-      // host should have always something in the address to uniquely identify
-      // the target region.
-      DP("Analyzing host entry '<null>' (size = %lld)...\n",
-         (unsigned long long)e->size);
+      // We return NULL when something like this happens, the host should have
+      // always something in the address to uniquely identify the target region.
+      DP("Invalid binary: host entry '<null>' (size = %zd)...\n", e->size);
 
-      __tgt_offload_entry entry = *e;
-      DeviceInfo.addOffloadEntry(device_id, entry);
-      continue;
+      return NULL;
     }
 
     if (e->size) {
-
       __tgt_offload_entry entry = *e;
 
       CUdeviceptr cuptr;
@@ -464,20 +451,20 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
       err = cuModuleGetGlobal(&cuptr, &cusize, cumod, e->name);
 
       if (err != CUDA_SUCCESS) {
-        DP("loading global '%s' (Failed)\n", e->name);
+        DP("Loading global '%s' (Failed)\n", e->name);
         CUDA_ERR_STRING(err);
         return NULL;
       }
 
       if (cusize != e->size) {
-        DP("loading global '%s' - size mismatch (%lld != %lld)\n", e->name,
-           (unsigned long long)cusize, (unsigned long long)e->size);
+        DP("Loading global '%s' - size mismatch (%zd != %zd)\n", e->name,
+            cusize, e->size);
         CUDA_ERR_STRING(err);
         return NULL;
       }
 
-      DP("Entry point %ld maps to global %s (%016lx)\n", e - HostBegin, e->name,
-         (long)cuptr);
+      DP("Entry point " DPxMOD " maps to global %s (" DPxMOD ")\n",
+          DPxPTR(e - HostBegin), e->name, DPxPTR(cuptr));
       entry.addr = (void *)cuptr;
 
       DeviceInfo.addOffloadEntry(device_id, entry);
@@ -489,29 +476,27 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
     err = cuModuleGetFunction(&fun, cumod, e->name);
 
     if (err != CUDA_SUCCESS) {
-      DP("loading '%s' (Failed)\n", e->name);
+      DP("Loading '%s' (Failed)\n", e->name);
       CUDA_ERR_STRING(err);
       return NULL;
     }
 
-    DP("Entry point %ld maps to %s (%016lx)\n", e - HostBegin, e->name,
-       (Elf64_Addr)fun);
+    DP("Entry point " DPxMOD " maps to %s (" DPxMOD ")\n",
+        DPxPTR(e - HostBegin), e->name, DPxPTR(fun));
 
     // default value GENERIC (in case symbol is missing from cubin file)
     int8_t ExecModeVal = ExecutionModeType::GENERIC;
-    const char suffix[] = "_exec_mode";
-    int32_t ExecModeLen = (strlen(e->name) + strlen(suffix) + 1) * sizeof(char);
-    char * ExecModeName = (char *) malloc(ExecModeLen);
-    snprintf(ExecModeName, ExecModeLen, "%s%s", e->name, suffix);
+    std::string ExecModeNameStr (e->name);
+    ExecModeNameStr += "_exec_mode";
+    const char *ExecModeName = ExecModeNameStr.c_str();
 
     CUdeviceptr ExecModePtr;
     size_t cusize;
     err = cuModuleGetGlobal(&ExecModePtr, &cusize, cumod, ExecModeName);
     if (err == CUDA_SUCCESS) {
       if ((size_t)cusize != sizeof(int8_t)) {
-        DP("loading global exec_mode '%s' - size mismatch (%lld != %lld)\n",
-           ExecModeName, (unsigned long long)cusize,
-           (unsigned long long)sizeof(int8_t));
+        DP("Loading global exec_mode '%s' - size mismatch (%zd != %zd)\n",
+           ExecModeName, cusize, sizeof(int8_t));
         CUDA_ERR_STRING(err);
         return NULL;
       }
@@ -519,9 +504,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
       err = cuMemcpyDtoH(&ExecModeVal, (CUdeviceptr)ExecModePtr, cusize);
       if (err != CUDA_SUCCESS) {
         DP("Error when copying data from device to host. Pointers: "
-           "host = 0x%016lx, device = 0x%016lx, size = %lld\n",
-           (Elf64_Addr)&ExecModeVal, (Elf64_Addr)ExecModePtr,
-           (unsigned long long)cusize);
+           "host = " DPxMOD ", device = " DPxMOD ", size = %zd\n",
+           DPxPTR(&ExecModeVal), DPxPTR(ExecModePtr), cusize);
         CUDA_ERR_STRING(err);
         return NULL;
       }
@@ -532,14 +516,13 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
         return NULL;
       }
     } else {
-      DP("loading global exec_mode '%s' - symbol missing, "
-         "using default value GENERIC (1)\n",
-         ExecModeName);
+      DP("Loading global exec_mode '%s' - symbol missing, using default value "
+          "GENERIC (1)\n", ExecModeName);
       CUDA_ERR_STRING(err);
     }
 
     KernelsList.push_back(KernelTy(fun, ExecModeVal,
-        /*ThreadLimitPtr=*/CUdeviceptr()));
+        /*ThreadLimitPtr=*/ CUdeviceptr()));
 
     __tgt_offload_entry entry = *e;
     entry.addr = (void *)&KernelsList.back();
@@ -572,7 +555,7 @@ void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size) {
 }
 
 int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
-                              int64_t size) {
+    int64_t size) {
   // Set the context we are using.
   CUresult err = cuCtxSetCurrent(DeviceInfo.Contexts[device_id]);
   if (err != CUDA_SUCCESS) {
@@ -583,9 +566,9 @@ int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
 
   err = cuMemcpyHtoD((CUdeviceptr)tgt_ptr, hst_ptr, size);
   if (err != CUDA_SUCCESS) {
-    DP("Error when copying data from host to device. Pointers: "
-       "host = 0x%016lx, device = 0x%016lx, size = %lld\n",
-       (Elf64_Addr)hst_ptr, (Elf64_Addr)tgt_ptr, (unsigned long long)size);
+    DP("Error when copying data from host to device. Pointers: host = " DPxMOD
+       ", device = " DPxMOD ", size = %" PRId64 "\n", DPxPTR(hst_ptr),
+       DPxPTR(tgt_ptr), size);
     CUDA_ERR_STRING(err);
     return OFFLOAD_FAIL;
   }
@@ -593,7 +576,7 @@ int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
 }
 
 int32_t __tgt_rtl_data_retrieve(int32_t device_id, void *hst_ptr, void *tgt_ptr,
-                                int64_t size) {
+    int64_t size) {
   // Set the context we are using.
   CUresult err = cuCtxSetCurrent(DeviceInfo.Contexts[device_id]);
   if (err != CUDA_SUCCESS) {
@@ -604,9 +587,9 @@ int32_t __tgt_rtl_data_retrieve(int32_t device_id, void *hst_ptr, void *tgt_ptr,
 
   err = cuMemcpyDtoH(hst_ptr, (CUdeviceptr)tgt_ptr, size);
   if (err != CUDA_SUCCESS) {
-    DP("Error when copying data from device to host. Pointers: "
-       "host = 0x%016lx, device = 0x%016lx, size = %lld\n",
-       (Elf64_Addr)hst_ptr, (Elf64_Addr)tgt_ptr, (unsigned long long)size);
+    DP("Error when copying data from device to host. Pointers: host = " DPxMOD
+        ", device = " DPxMOD ", size = %" PRId64 "\n", DPxPTR(hst_ptr),
+        DPxPTR(tgt_ptr), size);
     CUDA_ERR_STRING(err);
     return OFFLOAD_FAIL;
   }
@@ -688,8 +671,9 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     if (loop_tripcount > 0 && DeviceInfo.EnvNumTeams < 0) {
       // round up to the nearest integer
       cudaBlocksPerGrid = ((loop_tripcount - 1) / cudaThreadsPerBlock) + 1;
-      DP("Using %d teams due to loop trip count %lu and number of threads per "
-          "block %d\n", cudaBlocksPerGrid, loop_tripcount, cudaThreadsPerBlock);
+      DP("Using %d teams due to loop trip count %" PRIu64 " and number of "
+          "threads per block %d\n", cudaBlocksPerGrid, loop_tripcount,
+          cudaThreadsPerBlock);
     } else {
       cudaBlocksPerGrid = DeviceInfo.NumTeams[device_id];
       DP("Using default number of teams %d\n", DeviceInfo.NumTeams[device_id]);
@@ -706,31 +690,40 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   int nshared = 0;
 
   // Run on the device.
-  DP("launch kernel with %d blocks and %d threads\n", cudaBlocksPerGrid,
+  DP("Launch kernel with %d blocks and %d threads\n", cudaBlocksPerGrid,
      cudaThreadsPerBlock);
 
   err = cuLaunchKernel(KernelInfo->Func, cudaBlocksPerGrid, 1, 1,
-                       cudaThreadsPerBlock, 1, 1, nshared, 0, &args[0], 0);
+      cudaThreadsPerBlock, 1, 1, nshared, 0, &args[0], 0);
   if (err != CUDA_SUCCESS) {
-    DP("Device kernel launching failed!\n");
+    DP("Device kernel launch failed!\n");
     CUDA_ERR_STRING(err);
     assert(err == CUDA_SUCCESS && "Unable to launch target execution!");
     return OFFLOAD_FAIL;
   }
 
-  DP("Execution of entry point at %016lx successful!\n",
-     (Elf64_Addr)tgt_entry_ptr);
+  DP("Launch of entry point at " DPxMOD " successful!\n",
+      DPxPTR(tgt_entry_ptr));
+
+#ifdef OMPTARGET_DEBUG
+  if (cudaDeviceSynchronize() != cudaSuccess) {
+    DP("Kernel execution error at " DPxMOD ".\n", DPxPTR(tgt_entry_ptr));
+    return OFFLOAD_FAIL;
+  } else {
+    DP("Kernel execution at " DPxMOD " successful!\n", DPxPTR(tgt_entry_ptr));
+  }
+#endif
+
   return OFFLOAD_SUCCESS;
 }
 
 int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-                                    void **tgt_args, int32_t arg_num) {
-  // use one team and one thread.
-  // fix thread num.
-  int32_t team_num = 1;
-  int32_t thread_limit = 0; // use default.
+    void **tgt_args, int32_t arg_num) {
+  // use one team and the default number of threads.
+  const int32_t team_num = 1;
+  const int32_t thread_limit = 0;
   return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-                                          arg_num, team_num, thread_limit, 0);
+      arg_num, team_num, thread_limit, 0);
 }
 
 #ifdef __cplusplus

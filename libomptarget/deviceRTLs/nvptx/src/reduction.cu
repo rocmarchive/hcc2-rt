@@ -15,9 +15,7 @@
 #include <stdio.h>
 #include <complex.h>
 
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptx.h"
-
-EXTERN void omp_reduction_op_gpu(char *, char *);
+#include "omptarget-nvptx.h"
 
 // cannot implement atomic_start and atomic_end for GPU. Report runtime error
 EXTERN void __kmpc_atomic_start() {
@@ -475,7 +473,7 @@ ATOMIC_GENOP_FC(mul);
 ATOMIC_GENOP_FC(div);
 ATOMIC_GENOP_FC_REV(div);
 
-// for int and unit
+// for int and uint
 #define ATOMIC_GENOP_ALL_MIXED(_name, _dirname, _tname, _optype)               \
   _dirname(_tname, _optype, add, Add);                                         \
   _dirname(_tname, _optype, sub, Sub);                                         \

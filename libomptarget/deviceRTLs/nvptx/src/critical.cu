@@ -14,7 +14,7 @@
 #include <stdio.h>
 #include <complex.h>
 
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptx.h"
+#include "omptarget-nvptx.h"
 
 EXTERN
 void __kmpc_critical(kmp_Indent *loc, int32_t global_tid,

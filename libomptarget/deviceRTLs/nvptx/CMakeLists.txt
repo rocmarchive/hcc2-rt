@@ -59,10 +59,6 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
 
   set(omp_data_objects src/omp_data.cu)
 
-  include_directories(
-      src/
-  )
-
   # Get all the compute capabilities the user requested or use SM_35 by default.
   if(LIBOMPTARGET_NVPTX_COMPUTE_CAPABILITY)
     string(REPLACE "," ";" nvptx_sm_list ${LIBOMPTARGET_NVPTX_COMPUTE_CAPABILITY})

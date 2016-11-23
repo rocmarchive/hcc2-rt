@@ -22,7 +22,7 @@
 
 #include <stdint.h>
 
-#include "../../../deviceRTLs/nvptx/src/option.h" // choices we have
+#include "option.h" // choices we have
 
 template<typename ElementType, uint32_t SIZE>
 class omptarget_nvptx_Queue {
@@ -48,6 +48,6 @@ public:
   INLINE ElementType *Dequeue();
 };
 
-#include "../../../deviceRTLs/nvptx/src/state-queuei.h"
+#include "state-queuei.h"
 
 #endif

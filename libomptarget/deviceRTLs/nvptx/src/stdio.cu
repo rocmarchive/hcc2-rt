@@ -13,6 +13,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptx.h"
+#include "omptarget-nvptx.h"
 
 EXTERN int __kmpc_printf(const char *str) { return printf("%s", str); }

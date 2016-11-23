@@ -24,11 +24,11 @@
 #include <math.h>
 
 // local includes
-#include "../../../deviceRTLs/nvptx/src/option.h" // choices we have
-#include "../../../deviceRTLs/nvptx/src/counter_group.h"
-#include "../../../deviceRTLs/nvptx/src/debug.h" // debug
-#include "../../../deviceRTLs/nvptx/src/interface.h" // interfaces with omp, compiler, and user
-#include "../../../deviceRTLs/nvptx/src/support.h"
+#include "option.h" // choices we have
+#include "counter_group.h"
+#include "debug.h" // debug
+#include "interface.h" // interfaces with omp, compiler, and user
+#include "support.h"
 
 #define OMPTARGET_NVPTX_VERSION 1.1
 
@@ -324,8 +324,8 @@ INLINE omptarget_nvptx_TaskDescr *getMyTopTaskDescriptor(int globalThreadId);
 // inlined implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "../../../deviceRTLs/nvptx/src/supporti.h"
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptxi.h"
-#include "../../../deviceRTLs/nvptx/src/counter_groupi.h"
+#include "supporti.h"
+#include "omptarget-nvptxi.h"
+#include "counter_groupi.h"
 
 #endif

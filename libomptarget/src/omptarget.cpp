@@ -15,16 +15,12 @@
 #include <algorithm>
 #include <cassert>
 #include <climits>
-#include <cstring>
-#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <dlfcn.h>
 #include <list>
 #include <map>
 #include <mutex>
-#include <queue>
-#include <set>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -33,6 +29,7 @@
 
 #define DP(...) DEBUGP("Libomptarget", __VA_ARGS__)
 #define INF_REF_CNT (LONG_MAX>>1) // leave room for additions/subtractions
+#define CONSIDERED_INF(x) (x > (INF_REF_CNT>>1))
 
 // List of all plugins that can support offloading.
 static const char *RTLNames[] = {
@@ -48,18 +45,18 @@ static int target(int32_t device_id, void *host_ptr, int32_t arg_num,
 
 /// Map between host data and target data.
 struct HostDataToTargetTy {
-  long HstPtrBase; // host info.
-  long HstPtrBegin;
-  long HstPtrEnd; // non-inclusive.
+  uintptr_t HstPtrBase; // host info.
+  uintptr_t HstPtrBegin;
+  uintptr_t HstPtrEnd; // non-inclusive.
 
-  long TgtPtrBegin; // target info.
+  uintptr_t TgtPtrBegin; // target info.
 
   long RefCount;
 
   HostDataToTargetTy()
       : HstPtrBase(0), HstPtrBegin(0), HstPtrEnd(0),
         TgtPtrBegin(0), RefCount(0) {}
-  HostDataToTargetTy(long BP, long B, long E, long TB)
+  HostDataToTargetTy(uintptr_t BP, uintptr_t B, uintptr_t E, uintptr_t TB)
       : HstPtrBase(BP), HstPtrBegin(B), HstPtrEnd(E),
         TgtPtrBegin(TB), RefCount(1) {}
 };
@@ -150,12 +147,11 @@ struct DeviceTy {
   HostDataToTargetTy *getMapEntry(void *HstPtrBegin);
   LookupResult lookupMapping(void *HstPtrBegin, long Size);
   void *getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
-                         long &IsNew, long IsImplicit,
-                         long UpdateRefCount = true);
+      long &IsNew, long IsImplicit, long UpdateRefCount = true);
   void *getTgtPtrBegin(void *HstPtrBegin, long Size);
   void *getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
-                       long UpdateRefCount);
-  void deallocTgtPtr(void *TgtPtrBegin, long Size, long ForceDelete);
+      long UpdateRefCount);
+  int deallocTgtPtr(void *TgtPtrBegin, long Size, long ForceDelete);
   int associatePtr(void *HstPtrBegin, void *TgtPtrBegin, long Size);
   int disassociatePtr(void *HstPtrBegin);
 
@@ -168,11 +164,11 @@ struct DeviceTy {
 
   int32_t run_region(void *TgtEntryPtr, void **TgtVarsPtr, int32_t TgtVarsSize);
   int32_t run_team_region(void *TgtEntryPtr, void **TgtVarsPtr,
-                          int32_t TgtVarsSize, int32_t NumTeams,
-                          int32_t ThreadLimit, uint64_t LoopTripCount);
+      int32_t TgtVarsSize, int32_t NumTeams, int32_t ThreadLimit,
+      uint64_t LoopTripCount);
 
 private:
-  // call to RTL
+  // Call to RTL
   void init(); // To be called only via DeviceTy::initOnce()
 };
 
@@ -197,6 +193,11 @@ struct RTLInfoTy {
   std::vector<DeviceTy *> Devices; // one per device (NumberOfDevices in total).
 
   void *LibraryHandler;
+
+#ifdef OMPTARGET_DEBUG
+  std::string RTLName;
+#endif
+
   // Functions implemented in the RTL.
   is_valid_binary_ty *is_valid_binary;
   number_of_devices_ty *number_of_devices;
@@ -221,6 +222,9 @@ struct RTLInfoTy {
   // We need to provide a copy constructor explicitly.
   RTLInfoTy()
       : Idx(-1), NumberOfDevices(-1), Devices(), LibraryHandler(0),
+#ifdef OMPTARGET_DEBUG
+        RTLName(),
+#endif
         is_valid_binary(0), number_of_devices(0), init_device(0),
         load_binary(0), data_alloc(0), data_submit(0), data_retrieve(0),
         data_delete(0), run_region(0), run_team_region(0), isUsed(false),
@@ -231,6 +235,9 @@ struct RTLInfoTy {
     NumberOfDevices = r.NumberOfDevices;
     Devices = r.Devices;
     LibraryHandler = r.LibraryHandler;
+#ifdef OMPTARGET_DEBUG
+    RTLName = r.RTLName;
+#endif
     is_valid_binary = r.is_valid_binary;
     number_of_devices = r.number_of_devices;
     init_device = r.init_device;
@@ -281,9 +288,12 @@ void RTLsTy::LoadRTLs() {
     }
   }
 
+  DP("Loading RTLs...\n");
+
   // Attempt to open all the plugins and, if they exist, check if the interface
   // is correct and if they are supporting any devices.
   for (auto *Name : RTLNames) {
+    DP("Loading library '%s'...\n", Name);
     void *dynlib_handle = dlopen(Name, RTLD_NOW);
 
     if (!dynlib_handle) {
@@ -299,6 +309,11 @@ void RTLsTy::LoadRTLs() {
 
     R.LibraryHandler = dynlib_handle;
     R.isUsed = false;
+
+#ifdef OMPTARGET_DEBUG
+    R.RTLName = Name;
+#endif
+
     if (!(R.is_valid_binary = (RTLInfoTy::is_valid_binary_ty *)dlsym(
               dynlib_handle, "__tgt_rtl_is_valid_binary")))
       continue;
@@ -336,12 +351,15 @@ void RTLsTy::LoadRTLs() {
       continue;
     }
 
-    DP("Registering RTL %016lx supporting %d devices!\n", (long)dynlib_handle,
-       R.NumberOfDevices);
+    DP("Registering RTL %s supporting %d devices!\n",
+        R.RTLName.c_str(), R.NumberOfDevices);
 
     // The RTL is valid! Will save the information in the RTLs list.
     AllRTLs.push_back(R);
   }
+
+  DP("RTLs loaded!\n");
+
   return;
 }
 
@@ -386,6 +404,7 @@ static std::mutex TblMapMtx;
 // Check whether a device has an associated RTL and initialize it if it's not
 // already initialized.
 static bool device_is_ready(int device_num) {
+  DP("Checking whether device %d is ready.\n", device_num);
   // Devices.size() can only change while registering a new
   // library, so try to acquire the lock of RTLs' mutex.
   RTLsMtx.lock();
@@ -406,6 +425,8 @@ static bool device_is_ready(int device_num) {
     }
   }
 
+  DP("Device %d is ready to use.\n", device_num);
+
   return true;
 }
 
@@ -418,16 +439,19 @@ EXTERN int omp_get_num_devices(void) {
   size_t Devices_size = Devices.size();
   RTLsMtx.unlock();
 
+  DP("Call to omp_get_num_devices returning %zd\n", Devices_size);
+
   return Devices_size;
 }
 
 EXTERN int omp_get_initial_device(void) {
+  DP("Call to omp_get_initial_device returning %d\n", HOST_DEVICE);
   return HOST_DEVICE;
 }
 
 EXTERN void *omp_target_alloc(size_t size, int device_num) {
-  DP("Call to omp_target_alloc for device %d requesting %lu bytes\n",
-      device_num, (unsigned long) size);
+  DP("Call to omp_target_alloc for device %d requesting %zu bytes\n",
+      device_num, size);
 
   if (size <= 0) {
     DP("Call to omp_target_alloc with non-positive length\n");
@@ -438,7 +462,7 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
 
   if (device_num == omp_get_initial_device()) {
     rc = malloc(size);
-    DP("omp_target_alloc returns host ptr 0x%016llx\n", (long long) rc);
+    DP("omp_target_alloc returns host ptr " DPxMOD "\n", DPxPTR(rc));
     return rc;
   }
 
@@ -449,13 +473,13 @@ EXTERN void *omp_target_alloc(size_t size, int device_num) {
 
   DeviceTy &Device = Devices[device_num];
   rc = Device.RTL->data_alloc(Device.RTLDeviceID, size);
-  DP("omp_target_alloc returns device ptr 0x%016llx\n", (long long) rc);
+  DP("omp_target_alloc returns device ptr " DPxMOD "\n", DPxPTR(rc));
   return rc;
 }
 
 EXTERN void omp_target_free(void *device_ptr, int device_num) {
-  DP("Call to omp_target_free for device %d and address 0x%016llx\n",
-      device_num, (long long) device_ptr);
+  DP("Call to omp_target_free for device %d and address " DPxMOD "\n",
+      device_num, DPxPTR(device_ptr));
 
   if (!device_ptr) {
     DP("Call to omp_target_free with NULL ptr\n");
@@ -474,8 +498,8 @@ EXTERN void omp_target_free(void *device_ptr, int device_num) {
 }
 
 EXTERN int omp_target_is_present(void *ptr, int device_num) {
-  DP("Call to omp_target_is_present for device %d and address 0x%016llx\n",
-      device_num, (long long) ptr);
+  DP("Call to omp_target_is_present for device %d and address " DPxMOD "\n",
+      device_num, DPxPTR(ptr));
 
   if (!ptr) {
     DP("Call to omp_target_is_present with NULL ptr, returning false\n");
@@ -497,10 +521,9 @@ EXTERN int omp_target_is_present(void *ptr, int device_num) {
 EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
     size_t dst_offset, size_t src_offset, int dst_device, int src_device) {
   DP("Call to omp_target_memcpy, dst device %d, src device %d, "
-      "dst addr 0x%016llx, src addr 0x%016llx, dst offset %lu, src offset %lu, "
-      "length %lu\n", dst_device, src_device, (long long) dst, (long long) src,
-      (unsigned long) dst_offset, (unsigned long) src_offset,
-      (unsigned long) length);
+      "dst addr " DPxMOD ", src addr " DPxMOD ", dst offset %zu, "
+      "src offset %zu, length %zu\n", dst_device, src_device, DPxPTR(dst),
+      DPxPTR(src), dst_offset, src_offset, length);
 
   if (!dst || !src || length <= 0) {
     DP("Call to omp_target_memcpy with invalid arguments\n");
@@ -556,13 +579,12 @@ EXTERN int omp_target_memcpy_rect(void *dst, void *src, size_t element_size,
     const size_t *src_offsets, const size_t *dst_dimensions,
     const size_t *src_dimensions, int dst_device, int src_device) {
   DP("Call to omp_target_memcpy_rect, dst device %d, src device %d, "
-      "dst addr 0x%016llx, src addr 0x%016llx, dst offsets 0x%016llx, "
-      "src offsets 0x%016llx, dst dims 0x%016llx, src dims 0x%016llx, "
-      "volume 0x%016llx, element size %lu, num_dims %d\n", dst_device,
-      src_device, (long long) dst, (long long) src, (long long) dst_offsets,
-      (long long) src_offsets, (long long) dst_dimensions,
-      (long long) src_dimensions, (long long) volume,
-      (unsigned long) element_size, num_dims);
+      "dst addr " DPxMOD ", src addr " DPxMOD ", dst offsets " DPxMOD ", "
+      "src offsets " DPxMOD ", dst dims " DPxMOD ", src dims " DPxMOD ", "
+      "volume " DPxMOD ", element size %zu, num_dims %d\n", dst_device,
+      src_device, DPxPTR(dst), DPxPTR(src), DPxPTR(dst_offsets),
+      DPxPTR(src_offsets), DPxPTR(dst_dimensions), DPxPTR(src_dimensions),
+      DPxPTR(volume), element_size, num_dims);
 
   if (!(dst || src)) {
     DP("Call to omp_target_memcpy_rect returns max supported dimensions %d\n",
@@ -610,10 +632,9 @@ EXTERN int omp_target_memcpy_rect(void *dst, void *src, size_t element_size,
 
 EXTERN int omp_target_associate_ptr(void *host_ptr, void *device_ptr,
     size_t size, size_t device_offset, int device_num) {
-  DP("Call to omp_target_associate_ptr with host_ptr 0x%016llx, "
-      "device_ptr 0x%016llx, size %lu, device_offset %lu, device_num %d\n",
-      (long long) host_ptr, (long long) device_ptr, (unsigned long) size,
-      (unsigned long) device_offset, device_num);
+  DP("Call to omp_target_associate_ptr with host_ptr " DPxMOD ", "
+      "device_ptr " DPxMOD ", size %zu, device_offset %zu, device_num %d\n",
+      DPxPTR(host_ptr), DPxPTR(device_ptr), size, device_offset, device_num);
 
   if (!host_ptr || !device_ptr || size <= 0) {
     DP("Call to omp_target_associate_ptr with invalid arguments\n");
@@ -638,8 +659,8 @@ EXTERN int omp_target_associate_ptr(void *host_ptr, void *device_ptr,
 }
 
 EXTERN int omp_target_disassociate_ptr(void *host_ptr, int device_num) {
-  DP("Call to omp_target_disassociate_ptr with host_ptr 0x%016llx, "
-      "device_num %d\n", (long long) host_ptr, device_num);
+  DP("Call to omp_target_disassociate_ptr with host_ptr " DPxMOD ", "
+      "device_num %d\n", DPxPTR(host_ptr), device_num);
 
   if (!host_ptr) {
     DP("Call to omp_target_associate_ptr with invalid host_ptr\n");
@@ -670,11 +691,11 @@ int DeviceTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin, long Size) {
 
   // Check if entry exists
   for (auto &HT : HostDataToTargetMap) {
-    if ((long)HstPtrBegin == HT.HstPtrBegin) {
+    if ((uintptr_t)HstPtrBegin == HT.HstPtrBegin) {
       // Mapping already exists
-      bool isValid = HT.HstPtrBegin == (long) HstPtrBegin &&
-                     HT.HstPtrEnd == (long) HstPtrBegin + Size &&
-                     HT.TgtPtrBegin == (long) TgtPtrBegin;
+      bool isValid = HT.HstPtrBegin == (uintptr_t) HstPtrBegin &&
+                     HT.HstPtrEnd == (uintptr_t) HstPtrBegin + Size &&
+                     HT.TgtPtrBegin == (uintptr_t) TgtPtrBegin;
       DataMapMtx.unlock();
       if (isValid) {
         DP("Attempt to re-associate the same device ptr+offset with the same "
@@ -692,13 +713,17 @@ int DeviceTy::associatePtr(void *HstPtrBegin, void *TgtPtrBegin, long Size) {
   HostDataToTargetTy newEntry;
 
   // Set up missing fields
-  newEntry.HstPtrBase = (long) HstPtrBegin;
-  newEntry.HstPtrBegin = (long) HstPtrBegin;
-  newEntry.HstPtrEnd = (long) HstPtrBegin + Size;
-  newEntry.TgtPtrBegin = (long) TgtPtrBegin;
+  newEntry.HstPtrBase = (uintptr_t) HstPtrBegin;
+  newEntry.HstPtrBegin = (uintptr_t) HstPtrBegin;
+  newEntry.HstPtrEnd = (uintptr_t) HstPtrBegin + Size;
+  newEntry.TgtPtrBegin = (uintptr_t) TgtPtrBegin;
   // refCount must be infinite
   newEntry.RefCount = INF_REF_CNT;
 
+  DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", HstEnd="
+      DPxMOD ", TgtBegin=" DPxMOD "\n", DPxPTR(newEntry.HstPtrBase),
+      DPxPTR(newEntry.HstPtrBegin), DPxPTR(newEntry.HstPtrEnd),
+      DPxPTR(newEntry.TgtPtrBegin));
   HostDataToTargetMap.push_front(newEntry);
 
   DataMapMtx.unlock();
@@ -712,9 +737,9 @@ int DeviceTy::disassociatePtr(void *HstPtrBegin) {
   // Check if entry exists
   for (HostDataToTargetListTy::iterator ii = HostDataToTargetMap.begin();
       ii != HostDataToTargetMap.end(); ++ii) {
-    if ((long)HstPtrBegin == ii->HstPtrBegin) {
+    if ((uintptr_t)HstPtrBegin == ii->HstPtrBegin) {
       // Mapping exists
-      if (ii->RefCount > INF_REF_CNT>>1) {
+      if (CONSIDERED_INF(ii->RefCount)) {
         DP("Association found, removing it\n");
         HostDataToTargetMap.erase(ii);
         DataMapMtx.unlock();
@@ -735,19 +760,23 @@ int DeviceTy::disassociatePtr(void *HstPtrBegin) {
 
 // Get map entry containing HstPtrBegin
 HostDataToTargetTy *DeviceTy::getMapEntry(void *HstPtrBegin) {
-  long hp = (long)HstPtrBegin;
+  uintptr_t hp = (uintptr_t)HstPtrBegin;
   for (auto &HT : HostDataToTargetMap) {
     if (hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd) {
+      DP("DeviceTy::getMapEntry: requested entry found\n");
       return &HT;
     }
   }
+  DP("DeviceTy::getMapEntry: requested entry not found\n");
   return NULL;
 }
 
 LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, long Size) {
-  long hp = (long)HstPtrBegin;
+  uintptr_t hp = (uintptr_t)HstPtrBegin;
   LookupResult lr;
 
+  DP("Looking up mapping(HstPtrBegin=" DPxMOD ", Size=%ld)...\n", DPxPTR(hp),
+      Size);
   for (lr.Entry = HostDataToTargetMap.begin();
       lr.Entry != HostDataToTargetMap.end(); ++lr.Entry) {
     auto &HT = *lr.Entry;
@@ -759,19 +788,19 @@ LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, long Size) {
     // Does it extend beyond the mapped region?
     lr.Flags.ExtendsAfter = hp < HT.HstPtrEnd && (hp+Size) > HT.HstPtrEnd;
 
-    if (lr.Flags.ExtendsBefore) {
-      DP("WARNING: Pointer is not mapped but section extends into already "
-          "mapped data\n");
-    }
-    if (lr.Flags.ExtendsAfter) {
-      DP("WARNING: Pointer is already mapped but section extends beyond mapped "
-          "region\n");
-    }
-
     if (lr.Flags.IsContained || lr.Flags.ExtendsBefore ||
         lr.Flags.ExtendsAfter) {
       break;
     }
+  }
+
+  if (lr.Flags.ExtendsBefore) {
+    DP("WARNING: Pointer is not mapped but section extends into already "
+        "mapped data\n");
+  }
+  if (lr.Flags.ExtendsAfter) {
+    DP("WARNING: Pointer is already mapped but section extends beyond mapped "
+        "region\n");
   }
 
   return lr;
@@ -781,9 +810,10 @@ LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, long Size) {
 // Return the target pointer begin (where the data will be moved).
 // Allocate memory if this is the first occurrence if this mapping.
 // Increment the reference counter.
+// If NULL is returned, then either data allocation failed or the user tried
+// to do an illegal mapping.
 void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
-                                 long &IsNew, long IsImplicit,
-                                 long UpdateRefCount) {
+    long &IsNew, long IsImplicit, long UpdateRefCount) {
   // Check if the pointer is contained.
   DataMapMtx.lock();
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
@@ -795,8 +825,14 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
     if (UpdateRefCount)
       ++HT.RefCount;
 
-    long tp = HT.TgtPtrBegin + ((long)HstPtrBegin - HT.HstPtrBegin);
+    uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     DataMapMtx.unlock();
+    DP("Mapping exists%s with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
+        "Size=%ld,%s RefCount=%s\n", (IsImplicit ? " (implicit)" : ""),
+        DPxPTR(HstPtrBegin), DPxPTR(tp), Size,
+        (UpdateRefCount ? " updated" : ""),
+        (CONSIDERED_INF(HT.RefCount)) ? "INF" :
+            std::to_string(HT.RefCount).c_str());
     return (void *)tp;
   } else if ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && !IsImplicit) {
     DP("Explicit extension of mapping is not allowed.\n");
@@ -806,18 +842,22 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
 
   // If it is not contained we should create a new entry for it.
   IsNew = true;
-  long tp = (long)RTL->data_alloc(RTLDeviceID, Size);
-  HostDataToTargetMap.push_front(HostDataToTargetTy((long)HstPtrBase,
-      (long)HstPtrBegin, (long)HstPtrBegin + Size, tp));
+  uintptr_t tp = (uintptr_t)RTL->data_alloc(RTLDeviceID, Size);
+  assert(tp && "Data allocation by RTL returned invalid ptr");
+  DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", HstEnd="
+      DPxMOD ", TgtBegin=" DPxMOD "\n", DPxPTR(HstPtrBase), DPxPTR(HstPtrBegin),
+      DPxPTR((uintptr_t)HstPtrBegin + Size), DPxPTR(tp));
+  HostDataToTargetMap.push_front(HostDataToTargetTy((uintptr_t)HstPtrBase,
+      (uintptr_t)HstPtrBegin, (uintptr_t)HstPtrBegin + Size, tp));
   DataMapMtx.unlock();
   return (void *)tp;
 }
 
-// Used by target_data_end, target_data_update and target.
+// Used by target_data_begin, target_data_end, target_data_update and target.
 // Return the target pointer begin (where the data will be moved).
 // Decrement the reference counter if called from target_data_end.
 void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
-                               long UpdateRefCount) {
+    long UpdateRefCount) {
   DataMapMtx.lock();
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
   if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
@@ -827,8 +867,13 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
     if (HT.RefCount > 1 && UpdateRefCount)
       --HT.RefCount;
 
-    long tp = HT.TgtPtrBegin + ((long)HstPtrBegin - HT.HstPtrBegin);
+    uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
     DataMapMtx.unlock();
+    DP("Mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
+        "Size=%ld,%s RefCount=%s\n", DPxPTR(HstPtrBegin), DPxPTR(tp), Size,
+        (UpdateRefCount ? " updated" : ""),
+        (CONSIDERED_INF(HT.RefCount)) ? "INF" :
+            std::to_string(HT.RefCount).c_str());
     return (void *)tp;
   }
   DataMapMtx.unlock();
@@ -840,18 +885,18 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
 // Return the target pointer begin (where the data will be moved).
 // Lock-free version called from within assertions.
 void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size) {
-  long hp = (long)HstPtrBegin;
+  uintptr_t hp = (uintptr_t)HstPtrBegin;
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
   if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
     auto &HT = *lr.Entry;
-    long tp = HT.TgtPtrBegin + (hp - HT.HstPtrBegin);
+    uintptr_t tp = HT.TgtPtrBegin + (hp - HT.HstPtrBegin);
     return (void *)tp;
   }
 
   return NULL;
 }
 
-void DeviceTy::deallocTgtPtr(void *HstPtrBegin, long Size, long ForceDelete) {
+int DeviceTy::deallocTgtPtr(void *HstPtrBegin, long Size, long ForceDelete) {
   // Check if the pointer is contained in any sub-nodes.
   DataMapMtx.lock();
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
@@ -861,21 +906,25 @@ void DeviceTy::deallocTgtPtr(void *HstPtrBegin, long Size, long ForceDelete) {
       HT.RefCount = 1;
     if (--HT.RefCount <= 0) {
       assert(HT.RefCount == 0 && "did not expect a negative ref count");
-      DP("Deleting tgt data 0x%016llx of size %lld\n",
-         (long long)HT.TgtPtrBegin, (long long)Size);
+      DP("Deleting tgt data " DPxMOD " of size %ld\n",
+          DPxPTR(HT.TgtPtrBegin), Size);
       RTL->data_delete(RTLDeviceID, (void *)HT.TgtPtrBegin);
+      DP("Removing%s mapping with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD
+          ", Size=%ld\n", (ForceDelete ? " (forced)" : ""),
+          DPxPTR(HT.HstPtrBegin), DPxPTR(HT.TgtPtrBegin), Size);
       HostDataToTargetMap.erase(lr.Entry);
     }
     DataMapMtx.unlock();
-    return;
+    return OFFLOAD_SUCCESS;
   }
 
   DataMapMtx.unlock();
-  DP("Section to delete (hst addr 0x%llx) does not exist in the allocated "
-     "memory\n", (unsigned long long)HstPtrBegin);
+  DP("Section to delete (hst addr " DPxMOD ") does not exist in the allocated "
+     "memory\n", DPxPTR(HstPtrBegin));
+  return OFFLOAD_FAIL;
 }
 
-// init device.
+// Init device, should not be called directly.
 void DeviceTy::init() {
   int32_t rc = RTL->init_device(RTLDeviceID);
   if (rc == OFFLOAD_SUCCESS) {
@@ -883,7 +932,7 @@ void DeviceTy::init() {
   }
 }
 
-// thread-safe method to initialize the device only once.
+// Thread-safe method to initialize the device only once.
 int32_t DeviceTy::initOnce() {
   std::call_once(InitFlag, &DeviceTy::init, this);
 
@@ -899,7 +948,7 @@ int32_t DeviceTy::initOnce() {
     return OFFLOAD_FAIL;
 }
 
-// load binary to device.
+// Load binary to device.
 __tgt_target_table *DeviceTy::load_binary(void *Img) {
   RTL->Mtx.lock();
   __tgt_target_table *rc = RTL->load_binary(RTLDeviceID, Img);
@@ -907,38 +956,37 @@ __tgt_target_table *DeviceTy::load_binary(void *Img) {
   return rc;
 }
 
-// submit data to device.
+// Submit data to device.
 int32_t DeviceTy::data_submit(void *TgtPtrBegin, void *HstPtrBegin,
-                              int64_t Size) {
+    int64_t Size) {
   return RTL->data_submit(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size);
 }
 
-// retrieve data from device.
+// Retrieve data from device.
 int32_t DeviceTy::data_retrieve(void *HstPtrBegin, void *TgtPtrBegin,
-                                int64_t Size) {
+    int64_t Size) {
   return RTL->data_retrieve(RTLDeviceID, HstPtrBegin, TgtPtrBegin, Size);
 }
 
-// run region on device
+// Run region on device
 int32_t DeviceTy::run_region(void *TgtEntryPtr, void **TgtVarsPtr,
-                             int32_t TgtVarsSize) {
+    int32_t TgtVarsSize) {
   return RTL->run_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtVarsSize);
 }
 
-// run team region on device.
+// Run team region on device.
 int32_t DeviceTy::run_team_region(void *TgtEntryPtr, void **TgtVarsPtr,
-                                  int32_t TgtVarsSize, int32_t NumTeams,
-                                  int32_t ThreadLimit, uint64_t LoopTripCount) {
+    int32_t TgtVarsSize, int32_t NumTeams, int32_t ThreadLimit,
+    uint64_t LoopTripCount) {
   return RTL->run_team_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtVarsSize,
-                              NumTeams, ThreadLimit, LoopTripCount);
+      NumTeams, ThreadLimit, LoopTripCount);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// functionality for registering libs
+// Functionality for registering libs
 
 static void RegisterImageIntoTranslationTable(TranslationTable &TT,
-                                              RTLInfoTy &RTL,
-                                              __tgt_device_image *image) {
+    RTLInfoTy &RTL, __tgt_device_image *image) {
 
   // same size, as when we increase one, we also increase the other.
   assert(TT.TargetsTable.size() == TT.TargetsImages.size() &&
@@ -967,7 +1015,7 @@ static void RegisterImageIntoTranslationTable(TranslationTable &TT,
 /// adds a target shared library to the target execution image
 EXTERN void __tgt_register_lib(__tgt_bin_desc *desc) {
 
-  // Attempt to load all the plugins available in the system.
+  // Attempt to load all plugins available in the system.
   RTLs.LoadRTLsOnce();
 
   RTLsMtx.lock();
@@ -982,13 +1030,13 @@ EXTERN void __tgt_register_lib(__tgt_bin_desc *desc) {
     // the current image.
     for (auto &R : RTLs.AllRTLs) {
       if (!R.is_valid_binary(img)) {
-        DP("Image %016lx is NOT compatible with RTL %016lx!\n",
-           (long)img->ImageStart, (long)R.LibraryHandler);
+        DP("Image " DPxMOD " is NOT compatible with RTL %s!\n",
+            DPxPTR(img->ImageStart), R.RTLName.c_str());
         continue;
       }
 
-      DP("Image %016lx is compatible with RTL %016lx!\n", (long)img->ImageStart,
-         (long)R.LibraryHandler);
+      DP("Image " DPxMOD " is compatible with RTL %s!\n",
+          DPxPTR(img->ImageStart), R.RTLName.c_str());
 
       // If this RTL is not already in use, initialize it.
       if (!R.isUsed) {
@@ -1018,7 +1066,7 @@ EXTERN void __tgt_register_lib(__tgt_bin_desc *desc) {
         R.isUsed = true;
         RTLs.UsedRTLs.push_back(&R);
 
-        DP("RTL %016lx has index %d!\n", (long)R.LibraryHandler, R.Idx);
+        DP("RTL " DPxMOD " has index %d!\n", DPxPTR(R.LibraryHandler), R.Idx);
       }
 
       // Initialize (if necessary) translation table for this library.
@@ -1034,8 +1082,8 @@ EXTERN void __tgt_register_lib(__tgt_bin_desc *desc) {
       TranslationTable &TransTable =
           HostEntriesBeginToTransTable[desc->EntriesBegin];
 
-      DP("Registering image %016lx with RTL %016lx!\n", (long)img->ImageStart,
-         (long)R.LibraryHandler);
+      DP("Registering image " DPxMOD " with RTL %s!\n",
+          DPxPTR(img->ImageStart), R.RTLName.c_str());
       RegisterImageIntoTranslationTable(TransTable, R, img);
       TrlTblMtx.unlock();
       FoundRTL = &R;
@@ -1044,7 +1092,7 @@ EXTERN void __tgt_register_lib(__tgt_bin_desc *desc) {
 
     // if an RTL was found we are done - proceed to register the next image
     if (!FoundRTL) {
-      DP("No RTL found for image %016lx!\n", (long)img->ImageStart);
+      DP("No RTL found for image " DPxMOD "!\n", DPxPTR(img->ImageStart));
       continue;
     }
 
@@ -1056,12 +1104,14 @@ EXTERN void __tgt_register_lib(__tgt_bin_desc *desc) {
       for (__tgt_offload_entry *entry = img->EntriesBegin;
           entry != img->EntriesEnd; ++entry) {
         if (entry->flags & OMP_DECLARE_TARGET_CTOR) {
-          DP("Adding ctor %016lx to the pending list.\n", (long) entry->addr);
+          DP("Adding ctor " DPxMOD " to the pending list.\n",
+              DPxPTR(entry->addr));
           Device.PendingCtorsDtors[desc].PendingCtors.push_back(entry->addr);
         } else if (entry->flags & OMP_DECLARE_TARGET_DTOR) {
           // Dtors are pushed in reverse order so they are executed from end
           // to beginning when unregistering the library!
-          DP("Adding dtor %016lx to the pending list.\n", (long) entry->addr);
+          DP("Adding dtor " DPxMOD " to the pending list.\n",
+              DPxPTR(entry->addr));
           Device.PendingCtorsDtors[desc].PendingDtors.push_front(entry->addr);
         }
 
@@ -1098,13 +1148,13 @@ EXTERN void __tgt_unregister_lib(__tgt_bin_desc *desc) {
       assert(R->isUsed && "Expecting used RTLs.");
 
       if (!R->is_valid_binary(img)) {
-        DP("Image %016lx is NOT compatible with RTL %016lx!\n",
-           (long)img->ImageStart, (long)R->LibraryHandler);
+        DP("Image " DPxMOD " is NOT compatible with RTL " DPxMOD "!\n",
+            DPxPTR(img->ImageStart), DPxPTR(R->LibraryHandler));
         continue;
       }
 
-      DP("Image %016lx is compatible with RTL %016lx!\n", (long)img->ImageStart,
-         (long)R->LibraryHandler);
+      DP("Image " DPxMOD " is compatible with RTL " DPxMOD "!\n",
+          DPxPTR(img->ImageStart), DPxPTR(R->LibraryHandler));
 
       FoundRTL = R;
 
@@ -1118,7 +1168,7 @@ EXTERN void __tgt_unregister_lib(__tgt_bin_desc *desc) {
             int rc = target(Device.DeviceID, dtor, 0, NULL, NULL, NULL, NULL, 1,
                 1, true /*team*/);
             if (rc != OFFLOAD_SUCCESS) {
-              DP("Running destructor %016lx failed.\n", (long) dtor);
+              DP("Running destructor " DPxMOD " failed.\n", DPxPTR(dtor));
             }
           }
           // Remove this library's entry from PendingCtorsDtors
@@ -1132,11 +1182,11 @@ EXTERN void __tgt_unregister_lib(__tgt_bin_desc *desc) {
       auto tt = HostEntriesBeginToTransTable.find(desc->EntriesBegin);
       if (tt != HostEntriesBeginToTransTable.end()) {
         HostEntriesBeginToTransTable.erase(tt);
-        DP("Unregistering image %016lx from RTL %016lx!\n",
-            (long)img->ImageStart, (long)R->LibraryHandler);
+        DP("Unregistering image " DPxMOD " from RTL " DPxMOD "!\n",
+            DPxPTR(img->ImageStart), DPxPTR(R->LibraryHandler));
       } else {
-        DP("Translation table for image %016lx cannot be found, probably it "
-            "has been already removed.\n", (long)img->ImageStart);
+        DP("Translation table for image " DPxMOD " cannot be found, probably "
+            "it has been already removed.\n", DPxPTR(img->ImageStart));
       }
 
       TrlTblMtx.unlock();
@@ -1145,7 +1195,8 @@ EXTERN void __tgt_unregister_lib(__tgt_bin_desc *desc) {
 
     // if an RTL was not found proceed to unregister the next image
     if (!FoundRTL){
-      DP("No RTLs in use support the image %016lx!\n", (long)img->ImageStart);
+      DP("No RTLs in use support the image " DPxMOD "!\n",
+          DPxPTR(img->ImageStart));
       continue;
     }
   }
@@ -1153,7 +1204,6 @@ EXTERN void __tgt_unregister_lib(__tgt_bin_desc *desc) {
   DP("Done unregistering images!\n");
 
   // Remove entries from HostPtrToTableMap
-  // TODO: This seems quite time consuming...
   TblMapMtx.lock();
   for (__tgt_offload_entry *cur = desc->EntriesBegin;
       cur < desc->EntriesEnd; ++cur) {
@@ -1161,8 +1211,8 @@ EXTERN void __tgt_unregister_lib(__tgt_bin_desc *desc) {
   }
   TblMapMtx.unlock();
 
-  // TODO: Remove RTL and the devices it manages if it's not used by any library anymore?
-  // TODO: Write some RTL->unload_image(...) function.
+  // TODO: Remove RTL and the devices it manages if it's not used anymore?
+  // TODO: Write some RTL->unload_image(...) function?
 
   DP("Done unregistering library!\n");
 }
@@ -1213,7 +1263,7 @@ static int InitLibrary(DeviceTy& Device) {
 
     // Invalid image for these host entries!
     if (hsize != tsize) {
-      DP("Host and Target tables mismatch for device id %d [%lx != %lx].\n",
+      DP("Host and Target tables mismatch for device id %d [%zx != %zx].\n",
          device_id, hsize, tsize);
       TransTable->TargetsImages[device_id] = 0;
       TransTable->TargetsTable[device_id] = 0;
@@ -1237,14 +1287,13 @@ static int InitLibrary(DeviceTy& Device) {
                                      CurrHostEntry->size) == NULL &&
                "data in declared target should not be already mapped");
         // add entry to map.
-        DP("add mapping from host 0x%llx to 0x%llx with size %lld\n\n",
-           (unsigned long long)CurrHostEntry->addr,
-           (unsigned long long)CurrDeviceEntry->addr,
-           (unsigned long long)CurrDeviceEntry->size);
+        DP("Add mapping from host " DPxMOD " to device " DPxMOD " with size %zu"
+            "\n", DPxPTR(CurrHostEntry->addr), DPxPTR(CurrDeviceEntry->addr),
+            CurrDeviceEntry->size);
         Device.HostDataToTargetMap.push_front(HostDataToTargetTy(
-            (long)CurrHostEntry->addr, (long)CurrHostEntry->addr,
-            (long)CurrHostEntry->addr + CurrHostEntry->size,
-            (long)CurrDeviceEntry->addr));
+            (uintptr_t)CurrHostEntry->addr, (uintptr_t)CurrHostEntry->addr,
+            (uintptr_t)CurrHostEntry->addr + CurrHostEntry->size,
+            (uintptr_t)CurrDeviceEntry->addr));
       }
     }
     Device.DataMapMtx.unlock();
@@ -1269,14 +1318,14 @@ static int InitLibrary(DeviceTy& Device) {
           int rc = target(device_id, ctor, 0, NULL, NULL, NULL,
                           NULL, 1, 1, true /*team*/);
           if (rc != OFFLOAD_SUCCESS) {
-            DP("Running ctor %016lx failed.\n", (long) ctor);
+            DP("Running ctor " DPxMOD " failed.\n", DPxPTR(ctor));
             Device.PendingGlobalsMtx.unlock();
             return OFFLOAD_FAIL;
           }
         }
         // Clear the list to indicate that this device has been used
         lib.second.PendingCtors.clear();
-        DP("Done with pending ctors for lib %016lx\n", (long) lib.first);
+        DP("Done with pending ctors for lib " DPxMOD "\n", DPxPTR(lib.first));
       }
     }
   }
@@ -1286,6 +1335,8 @@ static int InitLibrary(DeviceTy& Device) {
   return OFFLOAD_SUCCESS;
 }
 
+// Check whether a device has been initialized, global ctors have been
+// executed and global data has been mapped; do so if not already done.
 static int CheckDevice(int32_t device_id) {
   // Get device info.
   DeviceTy &Device = Devices[device_id];
@@ -1302,7 +1353,7 @@ static int CheckDevice(int32_t device_id) {
   }
 
   DP("Is the device %d (local ID %d) initialized? %d\n", device_id,
-     Device.RTLDeviceID, (int)Device.IsInit);
+     Device.RTLDeviceID, Device.IsInit);
 
   // Init the device if not done before.
   if (!Device.IsInit) {
@@ -1318,7 +1369,7 @@ static int CheckDevice(int32_t device_id) {
   Device.PendingGlobalsMtx.unlock();
   if (hasPendingGlobals) {
     if (InitLibrary(Device) != OFFLOAD_SUCCESS) {
-      DP("failed to init globals on device %d\n", device_id);
+      DP("Failed to init globals on device %d\n", device_id);
       return OFFLOAD_FAIL;
     }
   }
@@ -1326,15 +1377,19 @@ static int CheckDevice(int32_t device_id) {
   return OFFLOAD_SUCCESS;
 }
 
+// Following datatypes and functions (tgt_oldmap_type, combined_entry_t,
+// translate_map, cleanup_map) will be removed once the compiler starts using
+// the new map types.
+
 // Old map types
 enum tgt_oldmap_type {
   OMP_TGT_OLDMAPTYPE_TO          = 0x001, // copy data from host to device
   OMP_TGT_OLDMAPTYPE_FROM        = 0x002, // copy data from device to host
-  OMP_TGT_OLDMAPTYPE_ALWAYS      = 0x004, // copy regardless of the reference count
+  OMP_TGT_OLDMAPTYPE_ALWAYS      = 0x004, // copy regardless of the ref. count
   OMP_TGT_OLDMAPTYPE_DELETE      = 0x008, // force unmapping of data
-  OMP_TGT_OLDMAPTYPE_MAP_PTR     = 0x010, // map the pointer as well as the pointee
+  OMP_TGT_OLDMAPTYPE_MAP_PTR     = 0x010, // map pointer as well as pointee
   OMP_TGT_OLDMAPTYPE_FIRST_MAP   = 0x020, // first occurrence of mapped variable
-  OMP_TGT_OLDMAPTYPE_RETURN_PTR  = 0x040, // return base device addr of mapped data
+  OMP_TGT_OLDMAPTYPE_RETURN_PTR  = 0x040, // return TgtBase addr of mapped data
   OMP_TGT_OLDMAPTYPE_PRIVATE_PTR = 0x080, // private variable - not mapped
   OMP_TGT_OLDMAPTYPE_PRIVATE_VAL = 0x100  // copy by value - not mapped
 };
@@ -1459,8 +1514,8 @@ static void translate_map(int32_t arg_num, void **args_base, void **args,
 
       int64_t padding = (int64_t)cmb_entries[cid].begin_addr % alignment;
       if (padding) {
-        DP("Using a padding of %ld for begin address 0x%016llx\n", padding,
-            (long long) cmb_entries[cid].begin_addr);
+        DP("Using a padding of %" PRId64 " for begin address " DPxMOD "\n",
+            padding, DPxPTR(cmb_entries[cid].begin_addr));
         cmb_entries[cid].begin_addr =
             (char *)cmb_entries[cid].begin_addr - padding;
       }
@@ -1470,10 +1525,10 @@ static void translate_map(int32_t arg_num, void **args_base, void **args,
       new_arg_sizes[nid] = (int64_t) ((char *)cmb_entries[cid].end_addr -
           (char *)cmb_entries[cid].begin_addr);
       new_arg_types[nid] = OMP_TGT_MAPTYPE_TARGET_PARAM;
-      DP("Entry %3d: base_addr 0x%016llx, begin_addr 0x%016llx, "
-          "size %lu, type 0x%llx\n", nid, (long long) new_args_base[nid],
-          (long long) new_args[nid], (unsigned long) new_arg_sizes[nid],
-          (long long) new_arg_types[nid]);
+      DP("Entry %3d: base_addr " DPxMOD ", begin_addr " DPxMOD ", "
+          "size %" PRId64 ", type 0x%" PRIx64 "\n", nid,
+          DPxPTR(new_args_base[nid]), DPxPTR(new_args[nid]), new_arg_sizes[nid],
+          new_arg_types[nid]);
     } else if (member_of[i] != -1) {
       DP("Combined entry %3d has been encountered before, do nothing\n",
           member_of[i]);
@@ -1498,10 +1553,10 @@ static void translate_map(int32_t arg_num, void **args_base, void **args,
       if (!is_target_construct)
         old_type &= ~OMP_TGT_MAPTYPE_TARGET_PARAM;
       new_arg_types[nid] = old_type;
-      DP("Entry %3d: base_addr 0x%016llx, begin_addr 0x%016llx, size %lu, "
-        "type 0x%llx (old entry %d not MEMBER_OF)\n", nid,
-        (long long) new_args_base[nid], (long long) new_args[nid],
-        (unsigned long) new_arg_sizes[nid], (long long) new_arg_types[nid], i);
+      DP("Entry %3d: base_addr " DPxMOD ", begin_addr " DPxMOD ", size %" PRId64
+          ", type 0x%" PRIx64 " (old entry %d not MEMBER_OF)\n", nid,
+          DPxPTR(new_args_base[nid]), DPxPTR(new_args[nid]), new_arg_sizes[nid],
+          new_arg_types[nid], i);
     } else {
       // Old entry is not FIRST_MAP
       old_type &= ~OMP_TGT_OLDMAPTYPE_FIRST_MAP;
@@ -1509,11 +1564,10 @@ static void translate_map(int32_t arg_num, void **args_base, void **args,
       int new_member_of = combined_to_new_id[member_of[i]];
       old_type |= ((int64_t)new_member_of + 1) << 48;
       new_arg_types[nid] = old_type;
-      DP("Entry %3d: base_addr 0x%016llx, begin_addr 0x%016llx, size %lu, "
-        "type 0x%llx (old entry %d MEMBER_OF %d)\n", nid,
-        (long long) new_args_base[nid], (long long) new_args[nid],
-        (unsigned long) new_arg_sizes[nid], (long long) new_arg_types[nid], i,
-        new_member_of);
+      DP("Entry %3d: base_addr " DPxMOD ", begin_addr " DPxMOD ", size %" PRId64
+        ", type 0x%" PRIx64 " (old entry %d MEMBER_OF %d)\n", nid,
+        DPxPTR(new_args_base[nid]), DPxPTR(new_args[nid]), new_arg_sizes[nid],
+        new_arg_types[nid], i, new_member_of);
     }
   }
 }
@@ -1539,10 +1593,10 @@ static short member_of(int64_t type) {
 }
 
 /// Internal function to do the mapping and transfer the data to the device
-static void target_data_begin(DeviceTy &Device, int32_t arg_num,
-                              void **args_base, void **args, int64_t *arg_sizes,
-                              int64_t *arg_types) {
+static int target_data_begin(DeviceTy &Device, int32_t arg_num,
+    void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types) {
   // process each input.
+  int rc = OFFLOAD_SUCCESS;
   for (int32_t i = 0; i < arg_num; ++i) {
     // Ignore private variables and arrays - there is no mapping for them.
     if ((arg_types[i] & OMP_TGT_MAPTYPE_LITERAL) ||
@@ -1557,14 +1611,18 @@ static void target_data_begin(DeviceTy &Device, int32_t arg_num,
     long IsImplicit = arg_types[i] & OMP_TGT_MAPTYPE_IMPLICIT;
     long UpdateRef = !(arg_types[i] & OMP_TGT_MAPTYPE_MEMBER_OF);
     if (arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ) {
-      DP("has a pointer entry: \n");
+      DP("Has a pointer entry: \n");
       // base is address of pointer.
       Pointer_TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBase, HstPtrBase,
           sizeof(void *), Pointer_IsNew, IsImplicit, UpdateRef);
-      DP("There are %ld bytes allocated at target address %016lx - is new %ld"
-          "\n", (long)sizeof(void *), (long)Pointer_TgtPtrBegin, Pointer_IsNew);
-      assert(Pointer_TgtPtrBegin &&
-             "Data allocation by RTL returned invalid ptr");
+      if (!Pointer_TgtPtrBegin) {
+        DP("Call to getOrAllocTgtPtr returned null pointer (device failure or "
+            "illegal mapping).\n");
+        rc = OFFLOAD_FAIL;
+      }
+      DP("There are %zu bytes allocated at target address " DPxMOD " - is%s new"
+          "\n", sizeof(void *), DPxPTR(Pointer_TgtPtrBegin),
+          (Pointer_IsNew ? "" : " not"));
       Pointer_HstPtrBegin = HstPtrBase;
       // modify current entry.
       HstPtrBase = *(void **)HstPtrBase;
@@ -1573,10 +1631,14 @@ static void target_data_begin(DeviceTy &Device, int32_t arg_num,
 
     void *TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBegin, HstPtrBase,
         arg_sizes[i], IsNew, IsImplicit, UpdateRef);
-    DP("There are %ld bytes allocated at target address %016lx - is new %ld"
-        "\n", (long)arg_sizes[i], (long)TgtPtrBegin, IsNew);
-    assert((TgtPtrBegin || !arg_sizes[i]) &&
-        "Data allocation by RTL returned invalid ptr");
+    if (!TgtPtrBegin) {
+      DP("Call to getOrAllocTgtPtr returned null pointer (device failure or "
+          "illegal mapping).\n");
+      rc = OFFLOAD_FAIL;
+    }
+    DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
+        " - is%s new\n", arg_sizes[i], DPxPTR(TgtPtrBegin),
+        (IsNew ? "" : " not"));
 
     if (arg_types[i] & OMP_TGT_MAPTYPE_RETURN_PARAM) {
       void *ret_ptr;
@@ -1587,7 +1649,7 @@ static void target_data_begin(DeviceTy &Device, int32_t arg_num,
         ret_ptr = Device.getTgtPtrBegin(HstPtrBegin, 0, IsLast, false);
       }
 
-      DP("Returning device pointer %016lx\n", (long)ret_ptr);
+      DP("Returning device pointer " DPxMOD "\n", DPxPTR(ret_ptr));
       args_base[i] = ret_ptr;
     }
 
@@ -1599,24 +1661,34 @@ static void target_data_begin(DeviceTy &Device, int32_t arg_num,
         // Copy data only if the "parent" struct has RefCount==1.
         short parent_idx = member_of(arg_types[i]);
         HostDataToTargetTy *entry = Device.getMapEntry(args[parent_idx]);
+        assert(entry && "getMapEntry returned null ptr.");
         if (entry->RefCount == 1) {
           copy = true;
         }
       }
 
       if (copy) {
-        DP("Moving %ld bytes (hst:%016lx) -> (tgt:%016lx)\n", (long)arg_sizes[i],
-           (long)HstPtrBegin, (long)TgtPtrBegin);
-        Device.data_submit(TgtPtrBegin, HstPtrBegin, arg_sizes[i]);
+        DP("Moving %" PRId64 " bytes (hst:" DPxMOD ") -> (tgt:" DPxMOD ")\n",
+            arg_sizes[i], DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBegin));
+        int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, arg_sizes[i]);
+        if (rt != OFFLOAD_SUCCESS) {
+          DP("Copying data to device failed.\n");
+          rc = OFFLOAD_FAIL;
+        }
       }
     }
 
     if (arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ) {
-      DP("Update pointer (%016lx) -> [%016lx]\n", (long)Pointer_TgtPtrBegin,
-         (long)TgtPtrBegin);
+      DP("Update pointer (" DPxMOD ") -> [" DPxMOD "]\n",
+          DPxPTR(Pointer_TgtPtrBegin), DPxPTR(TgtPtrBegin));
       uint64_t Delta = (uint64_t)HstPtrBegin - (uint64_t)HstPtrBase;
       void *TgtPtrBase = (void *)((uint64_t)TgtPtrBegin - Delta);
-      Device.data_submit(Pointer_TgtPtrBegin, &TgtPtrBase, sizeof(void *));
+      int rt = Device.data_submit(Pointer_TgtPtrBegin, &TgtPtrBase,
+          sizeof(void *));
+      if (rt != OFFLOAD_SUCCESS) {
+        DP("Copying data to device failed.\n");
+        rc = OFFLOAD_FAIL;
+      }
       // create shadow pointers for this entry
       Device.ShadowMtx.lock();
       Device.ShadowPtrMap[Pointer_HstPtrBegin] = {HstPtrBase,
@@ -1624,14 +1696,14 @@ static void target_data_begin(DeviceTy &Device, int32_t arg_num,
       Device.ShadowMtx.unlock();
     }
   }
+
+  return rc;
 }
 
 EXTERN void __tgt_target_data_begin_nowait(int32_t device_id, int32_t arg_num,
-                                           void **args_base, void **args,
-                                           int64_t *arg_sizes,
-                                           int32_t *arg_types, int32_t depNum,
-                                           void *depList, int32_t noAliasDepNum,
-                                           void *noAliasDepList) {
+    void **args_base, void **args, int64_t *arg_sizes, int32_t *arg_types,
+    int32_t depNum, void *depList, int32_t noAliasDepNum,
+    void *noAliasDepList) {
   if (depNum + noAliasDepNum > 0)
     __kmpc_omp_taskwait(NULL, 0);
 
@@ -1643,8 +1715,7 @@ EXTERN void __tgt_target_data_begin_nowait(int32_t device_id, int32_t arg_num,
 /// libomptarget.so internal structure (an entry in a stack of data maps)
 /// and passes the data to the device.
 EXTERN void __tgt_target_data_begin(int32_t device_id, int32_t arg_num,
-                                    void **args_base, void **args,
-                                    int64_t *arg_sizes, int32_t *arg_types) {
+    void **args_base, void **args, int64_t *arg_sizes, int32_t *arg_types) {
   DP("Entering data begin region for device %d with %d mappings\n", device_id,
      arg_num);
 
@@ -1680,9 +1751,9 @@ EXTERN void __tgt_target_data_begin(int32_t device_id, int32_t arg_num,
 }
 
 /// Internal function to undo the mapping and retrieve the data from the device.
-static void target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
-                            void **args, int64_t *arg_sizes,
-                            int64_t *arg_types) {
+static int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
+    void **args, int64_t *arg_sizes, int64_t *arg_types) {
+  int rc = OFFLOAD_SUCCESS;
   // process each input.
   for (int32_t i = arg_num - 1; i >= 0; --i) {
     // Ignore private variables and arrays - there is no mapping for them.
@@ -1700,8 +1771,9 @@ static void target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
     // If PTR_AND_OBJ, HstPtrBegin is address of pointee
     void *TgtPtrBegin = Device.getTgtPtrBegin(HstPtrBegin, arg_sizes[i], IsLast,
         UpdateRef);
-    DP("There are %ld bytes allocated at target address %016lx - is last %ld\n",
-       (long)arg_sizes[i], (long)TgtPtrBegin, IsLast);
+    DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
+        " - is%s last\n", arg_sizes[i], DPxPTR(TgtPtrBegin),
+        (IsLast ? "" : " not"));
 
     if ((arg_types[i] & OMP_TGT_MAPTYPE_MEMBER_OF) &&
         !(arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ)) {
@@ -1720,15 +1792,20 @@ static void target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
           // Copy data only if the "parent" struct has RefCount==1.
           short parent_idx = member_of(arg_types[i]);
           HostDataToTargetTy *entry = Device.getMapEntry(args[parent_idx]);
+          assert(entry && "getMapEntry returned null ptr.");
           if (entry->RefCount == 1) {
             CopyMember = true;
           }
         }
 
         if (DelEntry || Always || CopyMember) {
-          DP("Moving %ld bytes (tgt:%016lx) -> (hst:%016lx)\n",
-              (long)arg_sizes[i], (long)TgtPtrBegin, (long)HstPtrBegin);
-          Device.data_retrieve(HstPtrBegin, TgtPtrBegin, arg_sizes[i]);
+          DP("Moving %" PRId64 " bytes (tgt:" DPxMOD ") -> (hst:" DPxMOD ")\n",
+              arg_sizes[i], DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin));
+          int rt = Device.data_retrieve(HstPtrBegin, TgtPtrBegin, arg_sizes[i]);
+          if (rt != OFFLOAD_SUCCESS) {
+            DP("Copying data from device failed.\n");
+            rc = OFFLOAD_FAIL;
+          }
         }
       }
 
@@ -1752,13 +1829,14 @@ static void target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
 
         // If we copied the struct to the host, we need to restore the pointer.
         if (arg_types[i] & OMP_TGT_MAPTYPE_FROM) {
-          DP("Restoring original host pointer value %016lx for host pointer "
-              "%016lx\n", (long)it->second.HstPtrVal, (long)ShadowHstPtrAddr);
+          DP("Restoring original host pointer value " DPxMOD " for host "
+              "pointer " DPxMOD "\n", DPxPTR(it->second.HstPtrVal),
+              DPxPTR(ShadowHstPtrAddr));
           *ShadowHstPtrAddr = it->second.HstPtrVal;
         }
         // If the struct is to be deallocated, remove the shadow entry.
         if (DelEntry) {
-          DP("Removing shadow pointer %016lx\n", (long)ShadowHstPtrAddr);
+          DP("Removing shadow pointer " DPxMOD "\n", DPxPTR(ShadowHstPtrAddr));
           Device.ShadowPtrMap.erase(it);
         }
       }
@@ -1766,18 +1844,23 @@ static void target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
 
       // Deallocate map
       if (DelEntry) {
-        Device.deallocTgtPtr(HstPtrBegin, arg_sizes[i], ForceDelete);
+        int rt = Device.deallocTgtPtr(HstPtrBegin, arg_sizes[i], ForceDelete);
+        if (rt != OFFLOAD_SUCCESS) {
+          DP("Deallocating data from device failed.\n");
+          rc = OFFLOAD_FAIL;
+        }
       }
     }
   }
+
+  return rc;
 }
 
 /// passes data from the target, releases target memory and destroys
 /// the host-target mapping (top entry from the stack of data maps)
 /// created by the last __tgt_target_data_begin.
 EXTERN void __tgt_target_data_end(int32_t device_id, int32_t arg_num,
-                                  void **args_base, void **args,
-                                  int64_t *arg_sizes, int32_t *arg_types) {
+    void **args_base, void **args, int64_t *arg_sizes, int32_t *arg_types) {
   DP("Entering data end region with %d mappings\n", arg_num);
 
   // No devices available?
@@ -1818,11 +1901,9 @@ EXTERN void __tgt_target_data_end(int32_t device_id, int32_t arg_num,
 }
 
 EXTERN void __tgt_target_data_end_nowait(int32_t device_id, int32_t arg_num,
-                                         void **args_base, void **args,
-                                         int64_t *arg_sizes, int32_t *arg_types,
-                                         int32_t depNum, void *depList,
-                                         int32_t noAliasDepNum,
-                                         void *noAliasDepList) {
+    void **args_base, void **args, int64_t *arg_sizes, int32_t *arg_types,
+    int32_t depNum, void *depList, int32_t noAliasDepNum,
+    void *noAliasDepList) {
   if (depNum + noAliasDepNum > 0)
     __kmpc_omp_taskwait(NULL, 0);
 
@@ -1832,8 +1913,7 @@ EXTERN void __tgt_target_data_end_nowait(int32_t device_id, int32_t arg_num,
 
 /// passes data to/from the target.
 EXTERN void __tgt_target_data_update(int32_t device_id, int32_t arg_num,
-                                     void **args_base, void **args,
-                                     int64_t *arg_sizes, int32_t *arg_types) {
+    void **args_base, void **args, int64_t *arg_sizes, int32_t *arg_types) {
   DP("Entering data update with %d mappings\n", arg_num);
 
   // No devices available?
@@ -1861,8 +1941,8 @@ EXTERN void __tgt_target_data_update(int32_t device_id, int32_t arg_num,
         false);
 
     if (arg_types[i] & OMP_TGT_MAPTYPE_FROM) {
-      DP("Moving %ld bytes (tgt:%016lx) -> (hst:%016lx)\n", (long)arg_sizes[i],
-         (long)TgtPtrBegin, (long)HstPtrBegin);
+      DP("Moving %" PRId64 " bytes (tgt:" DPxMOD ") -> (hst:" DPxMOD ")\n",
+          arg_sizes[i], DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin));
       Device.data_retrieve(HstPtrBegin, TgtPtrBegin, MapSize);
 
       long lb = (long) HstPtrBegin;
@@ -1875,17 +1955,17 @@ EXTERN void __tgt_target_data_update(int32_t device_id, int32_t arg_num,
           continue;
         if ((long) ShadowHstPtrAddr >= ub)
           break;
-        DP("Restoring original host pointer value %016lx "
-            "for host pointer %016lx\n",
-            (long)it->second.HstPtrVal, (long)ShadowHstPtrAddr);
+        DP("Restoring original host pointer value " DPxMOD " for host pointer "
+            DPxMOD "\n", DPxPTR(it->second.HstPtrVal),
+            DPxPTR(ShadowHstPtrAddr));
         *ShadowHstPtrAddr = it->second.HstPtrVal;
       }
       Device.ShadowMtx.unlock();
     }
 
     if (arg_types[i] & OMP_TGT_MAPTYPE_TO) {
-      DP("Moving %ld bytes (hst:%016lx) -> (tgt:%016lx)\n", (long)arg_sizes[i],
-         (long)HstPtrBegin, (long)TgtPtrBegin);
+      DP("Moving %" PRId64 " bytes (hst:" DPxMOD ") -> (tgt:" DPxMOD ")\n",
+          arg_sizes[i], DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBegin));
       Device.data_submit(TgtPtrBegin, HstPtrBegin, MapSize);
 
       long lb = (long) HstPtrBegin;
@@ -1898,9 +1978,9 @@ EXTERN void __tgt_target_data_update(int32_t device_id, int32_t arg_num,
           continue;
         if ((long) ShadowHstPtrAddr >= ub)
           break;
-        DP("Restoring original target pointer value %016lx "
-            "for target pointer %016lx\n",
-            (long)it->second.TgtPtrVal, (long)it->second.TgtPtrAddr);
+        DP("Restoring original target pointer value " DPxMOD " for target "
+            "pointer " DPxMOD "\n", DPxPTR(it->second.TgtPtrVal),
+            DPxPTR(it->second.TgtPtrAddr));
         Device.data_submit(it->second.TgtPtrAddr,
             &it->second.TgtPtrVal, sizeof(void *));
       }
@@ -1927,9 +2007,8 @@ EXTERN void __tgt_target_data_update_nowait(
 /// returns 0 if it was able to transfer the execution to a target and an
 /// integer different from zero otherwise.
 static int target(int32_t device_id, void *host_ptr, int32_t arg_num,
-                  void **args_base, void **args, int64_t *arg_sizes,
-                  int64_t *arg_types, int32_t team_num, int32_t thread_limit,
-                  int IsTeamConstruct) {
+    void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
+    int32_t team_num, int32_t thread_limit, int IsTeamConstruct) {
   DeviceTy &Device = Devices[device_id];
 
   // Find the table information in the map or look it up in the translation
@@ -1970,8 +2049,8 @@ static int target(int32_t device_id, void *host_ptr, int32_t arg_num,
 
   // No map for this host pointer found!
   if (!TM) {
-    DP("Host ptr %016lx does not have a matching target pointer.\n",
-       (long)host_ptr);
+    DP("Host ptr " DPxMOD " does not have a matching target pointer.\n",
+       DPxPTR(host_ptr));
     return OFFLOAD_FAIL;
   }
 
@@ -1984,7 +2063,16 @@ static int target(int32_t device_id, void *host_ptr, int32_t arg_num,
   assert(TargetTable && "Global data has not been mapped\n");
 
   // Move data to device.
-  target_data_begin(Device, arg_num, args_base, args, arg_sizes, arg_types);
+  int rc = target_data_begin(Device, arg_num, args_base, args, arg_sizes,
+      arg_types);
+
+  if (rc != OFFLOAD_SUCCESS) {
+    DP("Call to target_data_begin failed, skipping target execution.\n");
+    // Call target_data_end to dealloc whatever target_data_begin allocated
+    // and return OFFLOAD_FAIL.
+    target_data_end(Device, arg_num, args_base, args, arg_sizes, arg_types);
+    return OFFLOAD_FAIL;
+  }
 
   std::vector<void *> tgt_args;
 
@@ -2001,36 +2089,50 @@ static int target(int32_t device_id, void *host_ptr, int32_t arg_num,
     void *TgtPtrBase;
     long IsLast; // unused.
     if (arg_types[i] & OMP_TGT_MAPTYPE_LITERAL) {
-      DP("Forwarding first-private value %016lx to the target construct\n",
-          (long)HstPtrBase);
+      DP("Forwarding first-private value " DPxMOD " to the target construct\n",
+          DPxPTR(HstPtrBase));
       TgtPtrBase = HstPtrBase;
     } else if (arg_types[i] & OMP_TGT_MAPTYPE_PRIVATE) {
-      DP("Allocated %ld bytes of target memory for %sprivate array "
-          "%016lx\n", arg_sizes[i], arg_types[i] & OMP_TGT_MAPTYPE_TO ?
-          "first-" : "", (long)HstPtrBegin);
       // Allocate memory for (first-)private array
       void *TgtPtrBegin = Device.RTL->data_alloc(Device.RTLDeviceID,
           arg_sizes[i]);
-      fpArrays.push_back(TgtPtrBegin);
-      uint64_t PtrDelta = (uint64_t)HstPtrBegin - (uint64_t)HstPtrBase;
-      TgtPtrBase = (void *)((uint64_t)TgtPtrBegin - PtrDelta);
-      // If first-private, copy data from host
-      if (arg_types[i] & OMP_TGT_MAPTYPE_TO) {
-        Device.data_submit(TgtPtrBegin, HstPtrBegin, arg_sizes[i]);
+      if (!TgtPtrBegin) {
+        DP ("Data allocation for %sprivate array " DPxMOD " failed\n",
+            (arg_types[i] & OMP_TGT_MAPTYPE_TO ? "first-" : ""),
+            DPxPTR(HstPtrBegin));
+        rc = OFFLOAD_FAIL;
+      } else {
+        fpArrays.push_back(TgtPtrBegin);
+        uint64_t PtrDelta = (uint64_t)HstPtrBegin - (uint64_t)HstPtrBase;
+        TgtPtrBase = (void *)((uint64_t)TgtPtrBegin - PtrDelta);
+        DP("Allocated %" PRId64 " bytes of target memory at " DPxMOD " for "
+            "%sprivate array " DPxMOD " - pushing target argument " DPxMOD "\n",
+            arg_sizes[i], DPxPTR(TgtPtrBegin),
+            (arg_types[i] & OMP_TGT_MAPTYPE_TO ? "first-" : ""),
+            DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBase));
+        // If first-private, copy data from host
+        if (arg_types[i] & OMP_TGT_MAPTYPE_TO) {
+          int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, arg_sizes[i]);
+          if (rt != OFFLOAD_SUCCESS) {
+            DP ("Copying data to device failed.\n");
+            rc = OFFLOAD_FAIL;
+          }
+        }
       }
     } else if (arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ) {
-      DP("Obtaining target argument from host pointer %016lx to object %016lx "
-         "\n", (long)HstPtrBase, (long)HstPtrBegin);
       void *TgtPtrBegin = Device.getTgtPtrBegin(HstPtrBase, sizeof(void *),
           IsLast, false);
       TgtPtrBase = TgtPtrBegin; // no offset for ptrs.
+      DP("Obtained target argument " DPxMOD " from host pointer " DPxMOD " to "
+         "object " DPxMOD "\n", DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBase),
+         DPxPTR(HstPtrBase));
     } else {
-      DP("Obtaining target argument from host pointer %016lx\n",
-          (long)HstPtrBegin);
       void *TgtPtrBegin = Device.getTgtPtrBegin(HstPtrBegin, arg_sizes[i],
           IsLast, false);
       uint64_t PtrDelta = (uint64_t)HstPtrBegin - (uint64_t)HstPtrBase;
       TgtPtrBase = (void *)((uint64_t)TgtPtrBegin - PtrDelta);
+      DP("Obtained target argument " DPxMOD " from host pointer " DPxMOD "\n",
+          DPxPTR(TgtPtrBase), DPxPTR(HstPtrBegin));
     }
     tgt_args.push_back(TgtPtrBase);
   }
@@ -2042,35 +2144,45 @@ static int target(int32_t device_id, void *host_ptr, int32_t arg_num,
   Device.loopTripCnt = 0;
 
   // Launch device execution.
-  int rc;
-  DP("Launching target execution with pointer %016lx (index=%d).\n",
-     (long)TargetTable->EntriesBegin[TM->Index].addr, TM->Index);
-  if (IsTeamConstruct) {
-    rc = Device.run_team_region(TargetTable->EntriesBegin[TM->Index].addr,
-                                &tgt_args[0], tgt_args.size(), team_num,
-                                thread_limit, ltc);
+  if (rc == OFFLOAD_SUCCESS) {
+    DP("Launching target execution %s with pointer " DPxMOD " (index=%d).\n",
+        TargetTable->EntriesBegin[TM->Index].name,
+        DPxPTR(TargetTable->EntriesBegin[TM->Index].addr), TM->Index);
+    if (IsTeamConstruct) {
+      rc = Device.run_team_region(TargetTable->EntriesBegin[TM->Index].addr,
+          &tgt_args[0], tgt_args.size(), team_num, thread_limit, ltc);
+    } else {
+      rc = Device.run_region(TargetTable->EntriesBegin[TM->Index].addr,
+          &tgt_args[0], tgt_args.size());
+    }
   } else {
-    rc = Device.run_region(TargetTable->EntriesBegin[TM->Index].addr,
-                           &tgt_args[0], tgt_args.size());
+    DP("Errors occurred while obtaining target arguments, skipping kernel "
+        "execution\n");
   }
 
   // Deallocate (first-)private arrays
   for (auto it : fpArrays) {
-    Device.RTL->data_delete(Device.RTLDeviceID, it);
+    int rt = Device.RTL->data_delete(Device.RTLDeviceID, it);
+    if (rt != OFFLOAD_SUCCESS) {
+      DP("Deallocation of (first-)private arrays failed.\n");
+      rc = OFFLOAD_FAIL;
+    }
   }
 
   // Move data from device.
-  target_data_end(Device, arg_num, args_base, args, arg_sizes, arg_types);
+  int rt = target_data_end(Device, arg_num, args_base, args, arg_sizes,
+      arg_types);
 
-  if (rc)
-    return OFFLOAD_FAIL;
+  if (rt != OFFLOAD_SUCCESS) {
+    DP("Call to target_data_end failed.\n");
+    rc = OFFLOAD_FAIL;
+  }
 
-  return OFFLOAD_SUCCESS;
+  return rc;
 }
 
 EXTERN int __tgt_target(int32_t device_id, void *host_ptr, int32_t arg_num,
-                        void **args_base, void **args, int64_t *arg_sizes,
-                        int32_t *arg_types) {
+    void **args_base, void **args, int64_t *arg_sizes, int32_t *arg_types) {
   if (device_id == OFFLOAD_DEVICE_CONSTRUCTOR ||
       device_id == OFFLOAD_DEVICE_DESTRUCTOR) {
     // Return immediately for the time being, target calls with device_id
@@ -2078,8 +2190,8 @@ EXTERN int __tgt_target(int32_t device_id, void *host_ptr, int32_t arg_num,
     return OFFLOAD_SUCCESS;
   }
 
-  DP("Entering target region with entry point %016lx and device Id %d\n",
-     (long)host_ptr, device_id);
+  DP("Entering target region with entry point " DPxMOD " and device Id %d\n",
+     DPxPTR(host_ptr), device_id);
 
   if (device_id == OFFLOAD_DEVICE_DEFAULT) {
     device_id = omp_get_default_device();
@@ -2112,10 +2224,9 @@ EXTERN int __tgt_target(int32_t device_id, void *host_ptr, int32_t arg_num,
 }
 
 EXTERN int __tgt_target_nowait(int32_t device_id, void *host_ptr,
-                               int32_t arg_num, void **args_base, void **args,
-                               int64_t *arg_sizes, int32_t *arg_types,
-                               int32_t depNum, void *depList,
-                               int32_t noAliasDepNum, void *noAliasDepList) {
+    int32_t arg_num, void **args_base, void **args, int64_t *arg_sizes,
+    int32_t *arg_types, int32_t depNum, void *depList, int32_t noAliasDepNum,
+    void *noAliasDepList) {
   if (depNum + noAliasDepNum > 0)
     __kmpc_omp_taskwait(NULL, 0);
 
@@ -2124,9 +2235,8 @@ EXTERN int __tgt_target_nowait(int32_t device_id, void *host_ptr,
 }
 
 EXTERN int __tgt_target_teams(int32_t device_id, void *host_ptr,
-                              int32_t arg_num, void **args_base, void **args,
-                              int64_t *arg_sizes, int32_t *arg_types,
-                              int32_t team_num, int32_t thread_limit) {
+    int32_t arg_num, void **args_base, void **args, int64_t *arg_sizes,
+    int32_t *arg_types, int32_t team_num, int32_t thread_limit) {
   if (device_id == OFFLOAD_DEVICE_CONSTRUCTOR ||
       device_id == OFFLOAD_DEVICE_DESTRUCTOR) {
     // Return immediately for the time being, target calls with device_id
@@ -2134,8 +2244,8 @@ EXTERN int __tgt_target_teams(int32_t device_id, void *host_ptr,
     return OFFLOAD_SUCCESS;
   }
 
-  DP("Entering target region with entry point %016lx and device Id %d\n",
-     (long)host_ptr, device_id);
+  DP("Entering target region with entry point " DPxMOD " and device Id %d\n",
+     DPxPTR(host_ptr), device_id);
 
   if (device_id == OFFLOAD_DEVICE_DEFAULT) {
     device_id = omp_get_default_device();
@@ -2169,12 +2279,9 @@ EXTERN int __tgt_target_teams(int32_t device_id, void *host_ptr,
 }
 
 EXTERN int __tgt_target_teams_nowait(int32_t device_id, void *host_ptr,
-                                     int32_t arg_num, void **args_base,
-                                     void **args, int64_t *arg_sizes,
-                                     int32_t *arg_types, int32_t team_num,
-                                     int32_t thread_limit, int32_t depNum,
-                                     void *depList, int32_t noAliasDepNum,
-                                     void *noAliasDepList) {
+    int32_t arg_num, void **args_base, void **args, int64_t *arg_sizes,
+    int32_t *arg_types, int32_t team_num, int32_t thread_limit, int32_t depNum,
+    void *depList, int32_t noAliasDepNum, void *noAliasDepList) {
   if (depNum + noAliasDepNum > 0)
     __kmpc_omp_taskwait(NULL, 0);
 
@@ -2182,6 +2289,8 @@ EXTERN int __tgt_target_teams_nowait(int32_t device_id, void *host_ptr,
                             arg_sizes, arg_types, team_num, thread_limit);
 }
 
+
+// The trip count mechanism will be revised - this scheme is not thread-safe.
 EXTERN void __kmpc_push_target_tripcount(int32_t device_id,
     uint64_t loop_tripcount) {
   if (device_id == OFFLOAD_DEVICE_DEFAULT) {
@@ -2193,7 +2302,8 @@ EXTERN void __kmpc_push_target_tripcount(int32_t device_id,
     return;
   }
 
-  DP("__kmpc_push_target_tripcount(%d, %lu)\n", device_id, loop_tripcount);
+  DP("__kmpc_push_target_tripcount(%d, %" PRIu64 ")\n", device_id,
+      loop_tripcount);
   Devices[device_id].loopTripCnt = loop_tripcount;
 }
 
@@ -2203,5 +2313,5 @@ EXTERN void __kmpc_push_target_tripcount(int32_t device_id,
 EXTERN void __kmpc_kernel_print(char *title) { DP(" %s\n", title); }
 
 EXTERN void __kmpc_kernel_print_int8(char *title, int64_t data) {
-  DP(" %s val=%lld\n", title, (long long)data);
+  DP(" %s val=%" PRId64 "\n", title, data);
 }
