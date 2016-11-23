@@ -841,9 +841,13 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
   }
 
   // If it is not contained we should create a new entry for it.
+  if (!Size) {
+    DataMapMtx.unlock();
+    return NULL;
+  }
+
   IsNew = true;
   uintptr_t tp = (uintptr_t)RTL->data_alloc(RTLDeviceID, Size);
-  assert(tp && "Data allocation by RTL returned invalid ptr");
   DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", HstEnd="
       DPxMOD ", TgtBegin=" DPxMOD "\n", DPxPTR(HstPtrBase), DPxPTR(HstPtrBegin),
       DPxPTR((uintptr_t)HstPtrBegin + Size), DPxPTR(tp));
@@ -1618,7 +1622,6 @@ static int target_data_begin(DeviceTy &Device, int32_t arg_num,
       if (!Pointer_TgtPtrBegin) {
         DP("Call to getOrAllocTgtPtr returned null pointer (device failure or "
             "illegal mapping).\n");
-        rc = OFFLOAD_FAIL;
       }
       DP("There are %zu bytes allocated at target address " DPxMOD " - is%s new"
           "\n", sizeof(void *), DPxPTR(Pointer_TgtPtrBegin),
@@ -1631,10 +1634,11 @@ static int target_data_begin(DeviceTy &Device, int32_t arg_num,
 
     void *TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBegin, HstPtrBase,
         arg_sizes[i], IsNew, IsImplicit, UpdateRef);
-    if (!TgtPtrBegin) {
+    if (!TgtPtrBegin && arg_sizes[i]) {
+      // If arg_sizes[i]==0, then the argument is a pointer to NULL, so
+      // getOrAlloc() returning NULL is not an error.
       DP("Call to getOrAllocTgtPtr returned null pointer (device failure or "
           "illegal mapping).\n");
-      rc = OFFLOAD_FAIL;
     }
     DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
         " - is%s new\n", arg_sizes[i], DPxPTR(TgtPtrBegin),

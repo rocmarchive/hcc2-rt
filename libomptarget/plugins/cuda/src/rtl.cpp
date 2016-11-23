@@ -533,6 +533,9 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
 }
 
 void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size) {
+  if (size == 0) {
+    return NULL;
+  }
 
   // Set the context we are using.
   CUresult err = cuCtxSetCurrent(DeviceInfo.Contexts[device_id]);

@@ -288,7 +288,7 @@ INLINE __device__ void dc_div(double complex *lhs, double complex rhs) {
   EXTERN void __kmpc_atomic_cmplx8_##_op(kmp_Indent *id_ref, int32_t gtid,     \
                                          double _Complex *lhs,                 \
                                          double _Complex rhs) {                \
-    printf("double complex atomic opertion not supported\n");                  \
+    printf("Double complex atomic operation not supported\n");                  \
     asm("trap;");                                                              \
     return;                                                                    \
   }                                                                            \
@@ -477,25 +477,6 @@ ATOMIC_GENOP_FC_REV(div);
 #define ATOMIC_GENOP_ALL_MIXED(_name, _dirname, _tname, _optype)               \
   _dirname(_tname, _optype, add, Add);                                         \
   _dirname(_tname, _optype, sub, Sub);                                         \
-  _name##_REV(_tname, _optype, sub);                                           \
-  _name(_tname, _optype, mul);                                                 \
-  _name(_tname, _optype, div);                                                 \
-  _name##_REV(_tname, _optype, div);                                           \
-  _dirname(_tname, _optype, min, Min);                                         \
-  _dirname(_tname, _optype, max, Max);                                         \
-  _dirname(_tname, _optype, andb, And);                                        \
-  _dirname(_tname, _optype, orb, Or);                                          \
-  _dirname(_tname, _optype, xor, Xor);                                         \
-  _name(_tname, _optype, shl);                                                 \
-  _name(_tname, _optype, shr);                                                 \
-  _name(_tname, _optype, andl);                                                \
-  _name(_tname, _optype, orl);                                                 \
-  _name(_tname, _optype, eqv);                                                 \
-  _name(_tname, _optype, neqv);
-
-#define ATOMIC_GENOP_ALL_MIXED_FIXED8U(_name, _dirname, _tname, _optype)       \
-  _dirname(_tname, _optype, add, Add);                                         \
-  _name(_tname, _optype, sub);                                                 \
   _name##_REV(_tname, _optype, sub);                                           \
   _name(_tname, _optype, mul);                                                 \
   _name(_tname, _optype, div);                                                 \
