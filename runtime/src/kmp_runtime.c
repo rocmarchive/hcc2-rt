@@ -25,6 +25,7 @@
 #include "kmp_error.h"
 #include "kmp_stats.h"
 #include "kmp_wait_release.h"
+#include "kmp_affinity.h"
 
 #if OMPT_SUPPORT
 #include "ompt-specific.h"
@@ -1420,7 +1421,7 @@ __kmp_fork_call(
     kmp_hot_team_ptr_t **p_hot_teams;
 #endif
     { // KMP_TIME_BLOCK
-    KMP_TIME_DEVELOPER_BLOCK(KMP_fork_call);
+    KMP_TIME_DEVELOPER_PARTITIONED_BLOCK(KMP_fork_call);
     KMP_COUNT_VALUE(OMP_PARALLEL_args, argc);
 
     KA_TRACE( 20, ("__kmp_fork_call: enter T#%d\n", gtid ));
@@ -2202,7 +2203,6 @@ __kmp_fork_call(
     {
         KMP_TIME_PARTITIONED_BLOCK(OMP_parallel);
         KMP_SET_THREAD_STATE_BLOCK(IMPLICIT_TASK);
-        // KMP_TIME_DEVELOPER_BLOCK(USER_master_invoke);
         if (! team->t.t_invoke( gtid )) {
             KMP_ASSERT2( 0, "cannot invoke microtask for MASTER thread" );
         }
@@ -2261,7 +2261,7 @@ __kmp_join_call(ident_t *loc, int gtid
 #endif /* OMP_40_ENABLED */
 )
 {
-    KMP_TIME_DEVELOPER_BLOCK(KMP_join_call);
+    KMP_TIME_DEVELOPER_PARTITIONED_BLOCK(KMP_join_call);
     kmp_team_t     *team;
     kmp_team_t     *parent_team;
     kmp_info_t     *master_th;
@@ -3684,6 +3684,13 @@ __kmp_register_root( int initial_thread )
         KMP_DEBUG_ASSERT( ! root->r.r_root_team );
     }
 
+#if KMP_STATS_ENABLED
+    // Initialize stats as soon as possible (right after gtid assignment).
+    __kmp_stats_thread_ptr = __kmp_stats_list->push_back(gtid);
+    KMP_START_EXPLICIT_TIMER(OMP_worker_thread_life);
+    KMP_SET_THREAD_STATE(SERIAL_REGION);
+    KMP_INIT_PARTITIONED_TIMERS(OMP_serial);
+#endif
     __kmp_initialize_root( root );
 
     /* setup new root thread structure */
@@ -4751,7 +4758,7 @@ __kmp_allocate_team( kmp_root_t *root, int new_nproc, int max_nproc,
     kmp_internal_control_t *new_icvs,
     int argc USE_NESTED_HOT_ARG(kmp_info_t *master) )
 {
-    KMP_TIME_DEVELOPER_BLOCK(KMP_allocate_team);
+    KMP_TIME_DEVELOPER_PARTITIONED_BLOCK(KMP_allocate_team);
     int f;
     kmp_team_t *team;
     int use_hot_team = ! root->r.r_active;
@@ -5507,9 +5514,7 @@ __kmp_launch_thread( kmp_info_t *this_thr )
                 }
 #endif
 
-                KMP_STOP_DEVELOPER_EXPLICIT_TIMER(USER_launch_thread_loop);
                 {
-                    KMP_TIME_DEVELOPER_BLOCK(USER_worker_invoke);
                     KMP_TIME_PARTITIONED_BLOCK(OMP_parallel);
                     KMP_SET_THREAD_STATE_BLOCK(IMPLICIT_TASK);
 #if KMP_THREADPRIVATE_TLS
@@ -5517,7 +5522,6 @@ __kmp_launch_thread( kmp_info_t *this_thr )
 #endif
                     rc = (*pteam)->t.t_invoke( gtid );
                 }
-                KMP_START_DEVELOPER_EXPLICIT_TIMER(USER_launch_thread_loop);
                 KMP_ASSERT( rc );
 
 #if OMPT_SUPPORT
@@ -5710,6 +5714,8 @@ __kmp_reap_thread(
         --__kmp_thread_pool_nth;
     }; // if
 
+    __kmp_free_implicit_task(thread);
+
     // Free the fast memory for tasking
     #if USE_FAST_MEMORY
         __kmp_free_fast_memory( thread );
@@ -5765,7 +5771,6 @@ __kmp_reap_thread(
     }; // if
 #endif /* KMP_AFFINITY_SUPPORTED */
 
-    __kmp_free_implicit_task(thread);
     __kmp_reap_team( thread->th.th_serial_team );
     thread->th.th_serial_team = NULL;
     __kmp_free( thread );
@@ -6338,7 +6343,7 @@ __kmp_do_serial_initialize( void )
 #endif
 #endif
 #if KMP_STATS_ENABLED
-    __kmp_init_tas_lock( & __kmp_stats_lock );
+    __kmp_stats_init();
 #endif
     __kmp_init_lock( & __kmp_global_lock     );
     __kmp_init_queuing_lock( & __kmp_dispatch_lock );
@@ -7299,8 +7304,7 @@ __kmp_cleanup( void )
     __kmp_i18n_catclose();
 
 #if KMP_STATS_ENABLED
-    __kmp_accumulate_stats_at_exit();
-    __kmp_stats_list.deallocate();
+    __kmp_stats_fini();
 #endif
 
     KA_TRACE( 10, ("__kmp_cleanup: exit\n" ) );
