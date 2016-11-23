@@ -591,6 +591,7 @@ extern size_t __kmp_affin_mask_size;
 
 class KMPAffinity {
 public:
+    virtual ~KMPAffinity() {}
     class Mask {
     public:
         void* operator new(size_t n);
