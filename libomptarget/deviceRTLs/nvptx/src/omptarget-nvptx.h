@@ -219,8 +219,8 @@ private:
       workDescrForActiveParallel; // one, ONLY for the active par
   omp_lock_t criticalLock;
 
-  __kmpc_data_sharing_worker_slot_static worker_rootS[DS_Max_Worker_Warp_Size - 1];
-  __kmpc_data_sharing_master_slot_static master_rootS[1];
+  __align__(16) __kmpc_data_sharing_worker_slot_static worker_rootS[DS_Max_Worker_Warp_Size - 1];
+  __align__(16) __kmpc_data_sharing_master_slot_static master_rootS[1];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
