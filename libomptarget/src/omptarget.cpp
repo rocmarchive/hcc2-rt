@@ -144,7 +144,7 @@ struct DeviceTy {
     return *this;
   }
 
-  HostDataToTargetTy *getMapEntry(void *HstPtrBegin);
+  long getMapEntryRefCnt(void *HstPtrBegin);
   LookupResult lookupMapping(void *HstPtrBegin, long Size);
   void *getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
       long &IsNew, long IsImplicit, long UpdateRefCount = true);
@@ -758,17 +758,26 @@ int DeviceTy::disassociatePtr(void *HstPtrBegin) {
   return OFFLOAD_FAIL;
 }
 
-// Get map entry containing HstPtrBegin
-HostDataToTargetTy *DeviceTy::getMapEntry(void *HstPtrBegin) {
+// Get ref count of map entry containing HstPtrBegin
+long DeviceTy::getMapEntryRefCnt(void *HstPtrBegin) {
   uintptr_t hp = (uintptr_t)HstPtrBegin;
+  long RefCnt = -1;
+
+  DataMapMtx.lock();
   for (auto &HT : HostDataToTargetMap) {
     if (hp >= HT.HstPtrBegin && hp < HT.HstPtrEnd) {
       DP("DeviceTy::getMapEntry: requested entry found\n");
-      return &HT;
+      RefCnt = HT.RefCount;
+      break;
     }
   }
-  DP("DeviceTy::getMapEntry: requested entry not found\n");
-  return NULL;
+  DataMapMtx.unlock();
+
+  if (RefCnt < 0) {
+    DP("DeviceTy::getMapEntry: requested entry not found\n");
+  }
+
+  return RefCnt;
 }
 
 LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, long Size) {
@@ -814,9 +823,11 @@ LookupResult DeviceTy::lookupMapping(void *HstPtrBegin, long Size) {
 // to do an illegal mapping.
 void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
     long &IsNew, long IsImplicit, long UpdateRefCount) {
-  // Check if the pointer is contained.
+  void *rc = NULL;
   DataMapMtx.lock();
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
+
+  // Check if the pointer is contained.
   if (lr.Flags.IsContained ||
       ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && IsImplicit)) {
     auto &HT = *lr.Entry;
@@ -826,35 +837,30 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
       ++HT.RefCount;
 
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
-    DataMapMtx.unlock();
     DP("Mapping exists%s with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
         "Size=%ld,%s RefCount=%s\n", (IsImplicit ? " (implicit)" : ""),
         DPxPTR(HstPtrBegin), DPxPTR(tp), Size,
         (UpdateRefCount ? " updated" : ""),
         (CONSIDERED_INF(HT.RefCount)) ? "INF" :
             std::to_string(HT.RefCount).c_str());
-    return (void *)tp;
+    rc = (void *)tp;
   } else if ((lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) && !IsImplicit) {
+    // Explicit extension of mapped data - not allowed.
     DP("Explicit extension of mapping is not allowed.\n");
-    DataMapMtx.unlock();
-    return NULL;
+  } else if (Size) {
+    // If it is not contained and Size > 0 we should create a new entry for it.
+    IsNew = true;
+    uintptr_t tp = (uintptr_t)RTL->data_alloc(RTLDeviceID, Size);
+    DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", "
+        "HstEnd=" DPxMOD ", TgtBegin=" DPxMOD "\n", DPxPTR(HstPtrBase),
+        DPxPTR(HstPtrBegin), DPxPTR((uintptr_t)HstPtrBegin + Size), DPxPTR(tp));
+    HostDataToTargetMap.push_front(HostDataToTargetTy((uintptr_t)HstPtrBase,
+        (uintptr_t)HstPtrBegin, (uintptr_t)HstPtrBegin + Size, tp));
+    rc = (void *)tp;
   }
 
-  // If it is not contained we should create a new entry for it.
-  if (!Size) {
-    DataMapMtx.unlock();
-    return NULL;
-  }
-
-  IsNew = true;
-  uintptr_t tp = (uintptr_t)RTL->data_alloc(RTLDeviceID, Size);
-  DP("Creating new map entry: HstBase=" DPxMOD ", HstBegin=" DPxMOD ", HstEnd="
-      DPxMOD ", TgtBegin=" DPxMOD "\n", DPxPTR(HstPtrBase), DPxPTR(HstPtrBegin),
-      DPxPTR((uintptr_t)HstPtrBegin + Size), DPxPTR(tp));
-  HostDataToTargetMap.push_front(HostDataToTargetTy((uintptr_t)HstPtrBase,
-      (uintptr_t)HstPtrBegin, (uintptr_t)HstPtrBegin + Size, tp));
   DataMapMtx.unlock();
-  return (void *)tp;
+  return rc;
 }
 
 // Used by target_data_begin, target_data_end, target_data_update and target.
@@ -862,8 +868,10 @@ void *DeviceTy::getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, long Size,
 // Decrement the reference counter if called from target_data_end.
 void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
     long UpdateRefCount) {
+  void *rc = NULL;
   DataMapMtx.lock();
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
+
   if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
     auto &HT = *lr.Entry;
     IsLast = !(HT.RefCount > 1);
@@ -872,18 +880,18 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size, long &IsLast,
       --HT.RefCount;
 
     uintptr_t tp = HT.TgtPtrBegin + ((uintptr_t)HstPtrBegin - HT.HstPtrBegin);
-    DataMapMtx.unlock();
     DP("Mapping exists with HstPtrBegin=" DPxMOD ", TgtPtrBegin=" DPxMOD ", "
         "Size=%ld,%s RefCount=%s\n", DPxPTR(HstPtrBegin), DPxPTR(tp), Size,
         (UpdateRefCount ? " updated" : ""),
         (CONSIDERED_INF(HT.RefCount)) ? "INF" :
             std::to_string(HT.RefCount).c_str());
-    return (void *)tp;
+    rc = (void *)tp;
+  } else {
+    IsLast = false;
   }
-  DataMapMtx.unlock();
 
-  IsLast = false;
-  return NULL;
+  DataMapMtx.unlock();
+  return rc;
 }
 
 // Return the target pointer begin (where the data will be moved).
@@ -902,6 +910,7 @@ void *DeviceTy::getTgtPtrBegin(void *HstPtrBegin, long Size) {
 
 int DeviceTy::deallocTgtPtr(void *HstPtrBegin, long Size, long ForceDelete) {
   // Check if the pointer is contained in any sub-nodes.
+  int rc;
   DataMapMtx.lock();
   LookupResult lr = lookupMapping(HstPtrBegin, Size);
   if (lr.Flags.IsContained || lr.Flags.ExtendsBefore || lr.Flags.ExtendsAfter) {
@@ -918,14 +927,15 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, long Size, long ForceDelete) {
           DPxPTR(HT.HstPtrBegin), DPxPTR(HT.TgtPtrBegin), Size);
       HostDataToTargetMap.erase(lr.Entry);
     }
-    DataMapMtx.unlock();
-    return OFFLOAD_SUCCESS;
+    rc = OFFLOAD_SUCCESS;
+  } else {
+    DP("Section to delete (hst addr " DPxMOD ") does not exist in the allocated"
+       " memory\n", DPxPTR(HstPtrBegin));
+    rc = OFFLOAD_FAIL;
   }
 
   DataMapMtx.unlock();
-  DP("Section to delete (hst addr " DPxMOD ") does not exist in the allocated "
-     "memory\n", DPxPTR(HstPtrBegin));
-  return OFFLOAD_FAIL;
+  return rc;
 }
 
 // Init device, should not be called directly.
@@ -1664,9 +1674,9 @@ static int target_data_begin(DeviceTy &Device, int32_t arg_num,
       } else if (arg_types[i] & OMP_TGT_MAPTYPE_MEMBER_OF) {
         // Copy data only if the "parent" struct has RefCount==1.
         short parent_idx = member_of(arg_types[i]);
-        HostDataToTargetTy *entry = Device.getMapEntry(args[parent_idx]);
-        assert(entry && "getMapEntry returned null ptr.");
-        if (entry->RefCount == 1) {
+        long parent_rc = Device.getMapEntryRefCnt(args[parent_idx]);
+        assert(parent_rc > 0 && "parent struct not found");
+        if (parent_rc == 1) {
           copy = true;
         }
       }
@@ -1795,9 +1805,9 @@ static int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
             !(arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ)) {
           // Copy data only if the "parent" struct has RefCount==1.
           short parent_idx = member_of(arg_types[i]);
-          HostDataToTargetTy *entry = Device.getMapEntry(args[parent_idx]);
-          assert(entry && "getMapEntry returned null ptr.");
-          if (entry->RefCount == 1) {
+          long parent_rc = Device.getMapEntryRefCnt(args[parent_idx]);
+          assert(parent_rc > 0 && "parent struct not found");
+          if (parent_rc == 1) {
             CopyMember = true;
           }
         }

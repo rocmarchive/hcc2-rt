@@ -207,7 +207,7 @@ void __kmpc_push_target_tripcount(int32_t device_id, uint64_t loop_tripcount);
  * use printf("ptr=" DPxMOD "...\n", DPxPTR(ptr));
  *
  * DPxMOD expands to:
- *   "0x%0" PRIxPTR
+ *   "0x%0*" PRIxPTR
  * where PRIxPTR expands to an appropriate modifier for the type uintptr_t on a
  * specific platform, e.g. "lu" if uintptr_t is typedef'd as unsigned long:
  *   "0x%0*lu"

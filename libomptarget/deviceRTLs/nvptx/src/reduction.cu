@@ -288,7 +288,7 @@ INLINE __device__ void dc_div(double complex *lhs, double complex rhs) {
   EXTERN void __kmpc_atomic_cmplx8_##_op(kmp_Indent *id_ref, int32_t gtid,     \
                                          double _Complex *lhs,                 \
                                          double _Complex rhs) {                \
-    printf("Double complex atomic operation not supported\n");                  \
+    printf("Double complex atomic operation not supported\n");                 \
     asm("trap;");                                                              \
     return;                                                                    \
   }                                                                            \
