@@ -1827,8 +1827,8 @@ static int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
       // need to restore the original host pointer values from their shadow
       // copies. If the struct is going to be deallocated, remove any remaining
       // shadow pointer entries for this struct.
-      long lb = (long) HstPtrBegin;
-      long ub = (long) HstPtrBegin + arg_sizes[i];
+      uintptr_t lb = HstPtrBegin;
+      uintptr_t ub = HstPtrBegin + arg_sizes[i];
       Device.ShadowMtx.lock();
       for (ShadowPtrListTy::iterator it = Device.ShadowPtrMap.begin();
           it != Device.ShadowPtrMap.end(); ++it) {
@@ -1836,9 +1836,9 @@ static int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
 
         // An STL map is sorted on its keys; use this property
         // to quickly determine when to break out of the loop.
-        if ((long) ShadowHstPtrAddr < lb)
+        if ((uintptr_t) ShadowHstPtrAddr < lb)
           continue;
-        if ((long) ShadowHstPtrAddr >= ub)
+        if ((uintptr_t) ShadowHstPtrAddr >= ub)
           break;
 
         // If we copied the struct to the host, we need to restore the pointer.
@@ -1959,15 +1959,15 @@ EXTERN void __tgt_target_data_update(int32_t device_id, int32_t arg_num,
           arg_sizes[i], DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin));
       Device.data_retrieve(HstPtrBegin, TgtPtrBegin, MapSize);
 
-      long lb = (long) HstPtrBegin;
-      long ub = (long) HstPtrBegin + MapSize;
+      uintptr_t lb = (uintptr_t) HstPtrBegin;
+      uintptr_t ub = (uintptr_t) HstPtrBegin + MapSize;
       Device.ShadowMtx.lock();
       for (ShadowPtrListTy::iterator it = Device.ShadowPtrMap.begin();
           it != Device.ShadowPtrMap.end(); ++it) {
         void **ShadowHstPtrAddr = (void**) it->first;
-        if ((long) ShadowHstPtrAddr < lb)
+        if ((uintptr_t) ShadowHstPtrAddr < lb)
           continue;
-        if ((long) ShadowHstPtrAddr >= ub)
+        if ((uintptr_t) ShadowHstPtrAddr >= ub)
           break;
         DP("Restoring original host pointer value " DPxMOD " for host pointer "
             DPxMOD "\n", DPxPTR(it->second.HstPtrVal),
@@ -1982,15 +1982,15 @@ EXTERN void __tgt_target_data_update(int32_t device_id, int32_t arg_num,
           arg_sizes[i], DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBegin));
       Device.data_submit(TgtPtrBegin, HstPtrBegin, MapSize);
 
-      long lb = (long) HstPtrBegin;
-      long ub = (long) HstPtrBegin + MapSize;
+      uintptr_t lb = (uintptr_t) HstPtrBegin;
+      uintptr_t ub = (uintptr_t) HstPtrBegin + MapSize;
       Device.ShadowMtx.lock();
       for (ShadowPtrListTy::iterator it = Device.ShadowPtrMap.begin();
           it != Device.ShadowPtrMap.end(); ++it) {
         void **ShadowHstPtrAddr = (void**) it->first;
-        if ((long) ShadowHstPtrAddr < lb)
+        if ((uintptr_t) ShadowHstPtrAddr < lb)
           continue;
-        if ((long) ShadowHstPtrAddr >= ub)
+        if ((uintptr_t) ShadowHstPtrAddr >= ub)
           break;
         DP("Restoring original target pointer value " DPxMOD " for target "
             "pointer " DPxMOD "\n", DPxPTR(it->second.TgtPtrVal),
