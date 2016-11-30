@@ -61,9 +61,9 @@ if(${LIBOMPTARGET_STANDALONE_BUILD})
     ${cmake_3_2_USES_TERMINAL}
   )
   
-  set(LIBOMPTARGET_OPENMP_HEADER_FOLDER "" CACHE STRING
+  set(LIBOMPTARGET_OPENMP_HEADER_FOLDER "${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src" CACHE STRING
     "Path to folder containing omp.h")
-  set(LIBOMPTARGET_OPENMP_HOST_RTL_FOLDER "" CACHE STRING
+  set(LIBOMPTARGET_OPENMP_HOST_RTL_FOLDER "${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src" CACHE STRING
     "Path to folder containing libomp.so")
 else()
   # LLVM source tree build, test just-built clang
