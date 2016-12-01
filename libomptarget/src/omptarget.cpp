@@ -401,8 +401,8 @@ typedef std::map<void *, TableMap> HostPtrToTableMapTy;
 static HostPtrToTableMapTy HostPtrToTableMap;
 static std::mutex TblMapMtx;
 
-// Check whether a device has an associated RTL and initialize it if it's not
-// already initialized.
+/// Check whether a device has an associated RTL and initialize it if it's not
+/// already initialized.
 static bool device_is_ready(int device_num) {
   DP("Checking whether device %d is ready.\n", device_num);
   // Devices.size() can only change while registering a new
@@ -431,9 +431,8 @@ static bool device_is_ready(int device_num) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// getter and setter
+// Target API functions
 //
-
 EXTERN int omp_get_num_devices(void) {
   RTLsMtx.lock();
   size_t Devices_size = Devices.size();
@@ -938,7 +937,7 @@ int DeviceTy::deallocTgtPtr(void *HstPtrBegin, long Size, long ForceDelete) {
   return rc;
 }
 
-// Init device, should not be called directly.
+/// Init device, should not be called directly.
 void DeviceTy::init() {
   int32_t rc = RTL->init_device(RTLDeviceID);
   if (rc == OFFLOAD_SUCCESS) {
@@ -946,7 +945,7 @@ void DeviceTy::init() {
   }
 }
 
-// Thread-safe method to initialize the device only once.
+/// Thread-safe method to initialize the device only once.
 int32_t DeviceTy::initOnce() {
   std::call_once(InitFlag, &DeviceTy::init, this);
 
