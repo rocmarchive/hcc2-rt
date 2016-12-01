@@ -72,16 +72,8 @@ struct KernelTy {
   // 1 - Generic mode (with master warp)
   int8_t ExecutionMode;
 
-  // keep track of cuda pointer to write to it when thread_limit value
-  // changes (check against last value written to ThreadLimit).
-  CUdeviceptr ThreadLimitPtr;
-  int ThreadLimit;
-
-  KernelTy(CUfunction _Func, int8_t _ExecutionMode, CUdeviceptr _ThreadLimitPtr)
-      : Func(_Func), ExecutionMode(_ExecutionMode),
-        ThreadLimitPtr(_ThreadLimitPtr) {
-    ThreadLimit = 0; // default (0) signals that it was not initialized
-  };
+  KernelTy(CUfunction _Func, int8_t _ExecutionMode)
+      : Func(_Func), ExecutionMode(_ExecutionMode) {}
 };
 
 /// List that contains all the kernels.
@@ -521,8 +513,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
       CUDA_ERR_STRING(err);
     }
 
-    KernelsList.push_back(KernelTy(fun, ExecModeVal,
-        /*ThreadLimitPtr=*/ CUdeviceptr()));
+    KernelsList.push_back(KernelTy(fun, ExecModeVal));
 
     __tgt_offload_entry entry = *e;
     entry.addr = (void *)&KernelsList.back();
@@ -640,10 +631,10 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 
   if (thread_limit > 0) {
     cudaThreadsPerBlock = thread_limit;
-    DP("Set CUDA threads per block to requested %d\n", thread_limit);
+    DP("Setting CUDA threads per block to requested %d\n", thread_limit);
   } else {
     cudaThreadsPerBlock = DeviceInfo.NumThreads[device_id];
-    DP("Set CUDA threads per block to default %d\n",
+    DP("Setting CUDA threads per block to default %d\n",
         DeviceInfo.NumThreads[device_id]);
   }
 
