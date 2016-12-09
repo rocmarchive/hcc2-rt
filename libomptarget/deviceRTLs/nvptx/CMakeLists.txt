@@ -161,7 +161,7 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
           -O0 
           -Xclang -target-feature 
           -Xclang +${CUDA_PTX_VERSION} 
-          --cuda-device-only 
+          --cuda-device-only -nocudalib
           -DOMPTARGET_NVPTX_TEST=0 -DOMPTARGET_NVPTX_DEBUG=0
       )
 
