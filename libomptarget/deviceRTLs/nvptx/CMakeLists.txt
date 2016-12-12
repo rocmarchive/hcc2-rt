@@ -148,11 +148,12 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
       libomptarget_say("Building CUDA LLVM bitcode offloading device RTL.")
 
       # Decide which ptx version to use. We use 5.0 for CUDA 8 or 4.2 for older versions
-      if(CUDA_VERSION_MAJOR LESS 8)
-	set(CUDA_PTX_VERSION ptx42)
-      else()
-        set(CUDA_PTX_VERSION ptx50)
-      endif()     
+      #if(CUDA_VERSION_MAJOR LESS 8)
+	#set(CUDA_PTX_VERSION ptx42)
+      #else()
+        #set(CUDA_PTX_VERSION ptx50)
+      #endif()     
+      set(CUDA_PTX_VERSION ptx42)
  
       # Set flags for Clang cuda compilation.  Only Clang is supported because there is
       # no other compiler capable of generating bitcode from cuda sources.
