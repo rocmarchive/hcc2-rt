@@ -194,13 +194,13 @@ typedef int32_t kmp_CriticalName[8];
 ////////////////////////////////////////////////////////////////////////////////
 
 // query
-EXTERN int32_t __kmpc_global_thread_num(kmp_Indent *loc);  // missing
 EXTERN int32_t __kmpc_global_num_threads(kmp_Indent *loc); // missing
 EXTERN int32_t __kmpc_bound_thread_num(kmp_Indent *loc);   // missing
 EXTERN int32_t __kmpc_bound_num_threads(kmp_Indent *loc);  // missing
 EXTERN int32_t __kmpc_in_parallel(kmp_Indent *loc);        // missing
 
 // parallel
+EXTERN int32_t __kmpc_global_thread_num(kmp_Indent *loc);
 EXTERN void __kmpc_push_num_threads(kmp_Indent *loc, int32_t global_tid,
                                     int32_t num_threads);
 // simd
