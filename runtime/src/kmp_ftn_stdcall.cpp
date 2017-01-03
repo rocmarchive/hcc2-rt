@@ -1,5 +1,5 @@
 /*
- * kmp_ftn_extra.c -- Fortran 'extra' linkage support for OpenMP.
+ * kmp_ftn_stdcall.cpp -- Fortran __stdcall linkage support for OpenMP.
  */
 
 
@@ -14,21 +14,22 @@
 
 
 #include "kmp.h"
-#include "kmp_affinity.h"
-
-#if KMP_OS_WINDOWS
-#   define KMP_FTN_ENTRIES KMP_FTN_PLAIN
-#elif KMP_OS_UNIX
-#   define KMP_FTN_ENTRIES KMP_FTN_APPEND
-#endif
 
 // Note: This string is not printed when KMP_VERSION=1.
-char const __kmp_version_ftnextra[] = KMP_VERSION_PREFIX "Fortran \"extra\" OMP support: "
-#ifdef KMP_FTN_ENTRIES
+char const __kmp_version_ftnstdcall[] = KMP_VERSION_PREFIX "Fortran __stdcall OMP support: "
+#ifdef USE_FTN_STDCALL
     "yes";
-#   define FTN_STDCALL /* nothing to do */
-#   include "kmp_ftn_os.h"
-#   include "kmp_ftn_entry.h"
 #else
     "no";
-#endif /* KMP_FTN_ENTRIES */
+#endif
+
+#ifdef USE_FTN_STDCALL
+
+#define FTN_STDCALL 	KMP_STDCALL
+#define KMP_FTN_ENTRIES	USE_FTN_STDCALL
+
+#include "kmp_ftn_os.h"
+#include "kmp_ftn_entry.h"
+
+#endif /* USE_FTN_STDCALL */
+
