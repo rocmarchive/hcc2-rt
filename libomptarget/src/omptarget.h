@@ -83,10 +83,10 @@ struct __tgt_device_image {
 /// This struct is a record of all the host code that may be offloaded to a
 /// target.
 struct __tgt_bin_desc {
-  int32_t NumDevices;                // Number of device types supported
+  int32_t NumDeviceImages;           // Number of device types supported
   __tgt_device_image *DeviceImages;  // Array of device images (1 per dev. type)
-  __tgt_offload_entry *EntriesBegin; // Begin of table with all host entries
-  __tgt_offload_entry *EntriesEnd;   // End of table (non inclusive)
+  __tgt_offload_entry *HostEntriesBegin; // Begin of table with all host entries
+  __tgt_offload_entry *HostEntriesEnd;   // End of table (non inclusive)
 };
 
 /// This struct contains the offload entries identified by the target runtime
@@ -160,12 +160,12 @@ void __tgt_target_data_update_nowait(int32_t device_id, int32_t arg_num,
                                      int32_t noAliasDepNum,
                                      void *noAliasDepList);
 
-// performs the same actions as data_begin in case arg_num is non-zero
+// Performs the same actions as data_begin in case arg_num is non-zero
 // and initiates run of offloaded region on target platform; if arg_num
 // is non-zero after the region execution is done it also performs the
-// same action as data_update and data_end above. The following types are
-// used; this function returns 0 if it was able to transfer the execution
-// to a target and an int different from zero otherwise
+// same action as data_end above. The following types are used; this
+// function returns 0 if it was able to transfer the execution to a
+// target and an int different from zero otherwise.
 int __tgt_target(int32_t device_id, void *host_ptr, int32_t arg_num,
                  void **args_base, void **args, int64_t *arg_sizes,
                  int32_t *arg_types);
