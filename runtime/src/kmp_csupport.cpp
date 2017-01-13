@@ -1,5 +1,5 @@
 /*
- * kmp_csupport.c -- kfront linkage support for OpenMP.
+ * kmp_csupport.cpp -- kfront linkage support for OpenMP.
  */
 
 
@@ -121,9 +121,9 @@ waiting for work.
 kmp_int32
 __kmpc_global_num_threads(ident_t *loc)
 {
-    KC_TRACE( 10, ("__kmpc_global_num_threads: num_threads = %d\n", __kmp_nth ) );
+    KC_TRACE(10,("__kmpc_global_num_threads: num_threads = %d\n", __kmp_all_nth));
 
-    return TCR_4(__kmp_nth);
+    return TCR_4(__kmp_all_nth);
 }
 
 /*!
@@ -464,9 +464,10 @@ when the condition is false.
 void
 __kmpc_serialized_parallel(ident_t *loc, kmp_int32 global_tid)
 {
-    __kmp_serialized_parallel(loc, global_tid); /* The implementation is now in kmp_runtime.c so that it can share static functions with
-                                                 * kmp_fork_call since the tasks to be done are similar in each case.
-                                                 */
+    // The implementation is now in kmp_runtime.cpp so that it can share static
+    // functions with kmp_fork_call since the tasks to be done are similar in
+    // each case.
+    __kmp_serialized_parallel(loc, global_tid);
 }
 
 /*!
@@ -624,7 +625,7 @@ __kmpc_flush(ident_t *loc)
                 #endif // KMP_COMPILER_ICC
             }; // if
         #endif // KMP_MIC
-    #elif (KMP_ARCH_ARM || KMP_ARCH_AARCH64)
+    #elif (KMP_ARCH_ARM || KMP_ARCH_AARCH64 || KMP_ARCH_MIPS || KMP_ARCH_MIPS64)
         // Nothing to see here move along
     #elif KMP_ARCH_PPC64
         // Nothing needed here (we have a real MB above).

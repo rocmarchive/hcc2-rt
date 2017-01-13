@@ -1,5 +1,5 @@
 /*
- * z_Windows_NT_util.c -- platform specific routines.
+ * z_Windows_NT_util.cpp -- platform specific routines.
  */
 
 
@@ -560,12 +560,16 @@ __kmp_affinity_bind_thread( int proc )
         if (__kmp_SetThreadGroupAffinity(GetCurrentThread(), &ga, NULL) == 0) {
             DWORD error = GetLastError();
             if (__kmp_affinity_verbose) { // AC: continue silently if not verbose
+                kmp_msg_t err_code = KMP_ERR( error );
                 __kmp_msg(
                     kmp_ms_warning,
                     KMP_MSG( CantSetThreadAffMask ),
-                    KMP_ERR( error ),
+                    err_code,
                     __kmp_msg_null
                 );
+                if (__kmp_generate_warnings == kmp_warnings_off) {
+                    __kmp_str_free(&err_code.str);
+                }
             }
         }
     } else {

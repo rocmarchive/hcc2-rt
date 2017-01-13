@@ -1,5 +1,5 @@
 /*
- * kmp_environment.c -- Handle environment variables OS-independently.
+ * kmp_environment.cpp -- Handle environment variables OS-independently.
  */
 
 
@@ -566,11 +566,10 @@ __kmp_env_blk_free(
 ) {
 
     KMP_INTERNAL_FREE( (void *) block->vars );
-    KMP_INTERNAL_FREE( (void *) block->bulk );
+    __kmp_str_free(&(block->bulk));
 
     block->count = 0;
     block->vars  = NULL;
-    block->bulk  = NULL;
 
 } // __kmp_env_blk_free
 
