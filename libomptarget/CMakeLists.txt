@@ -33,8 +33,12 @@ if(${LIBOMPTARGET_STANDALONE_BUILD})
   if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
   endif()
+  set(LIBOMPTARGET_LIBDIR_SUFFIX "" CACHE STRING
+    "suffix of lib installation directory, e.g. 64 => lib64")
 else()
-  set(LIBOMP_ENABLE_WERROR ${LLVM_ENABLE_WERROR})
+  set(LIBOMPTARGET_ENABLE_WERROR ${LLVM_ENABLE_WERROR})
+  # If building in tree, we honor the same install suffix LLVM uses.
+  set(LIBOMPTARGET_LIBDIR_SUFFIX ${LLVM_LIBDIR_SUFFIX})
 endif()
 
 # Compiler flag checks.
@@ -94,7 +98,7 @@ if(LIBOMPTARGET_HAVE_STD_CPP11_FLAG)
     "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports")
   
   # Install libomptarget under the lib destination folder.
-  install(TARGETS omptarget LIBRARY DESTINATION "lib")
+  install(TARGETS omptarget LIBRARY DESTINATION lib${LIBOMPTARGET_LIBDIR_SUFFIX})
   
   # Retrieve the path to the resulting library so that it can be used for 
   # testing.

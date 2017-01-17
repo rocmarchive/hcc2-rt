@@ -510,6 +510,15 @@ EXTERN int omp_target_is_present(void *ptr, int device_num) {
     return true;
   }
 
+  RTLsMtx.lock();
+  size_t Devices_size = Devices.size();
+  RTLsMtx.unlock();
+  if (Devices_size <= (size_t)device_num) {
+    DP("Call to omp_target_is_present with invalid device ID, returning "
+        "false\n");
+    return false;
+  }
+
   DeviceTy& Device = Devices[device_num];
   bool IsLast; // not used
   int rc = (Device.getTgtPtrBegin(ptr, 0, IsLast, false) != NULL);
@@ -1372,11 +1381,9 @@ static int CheckDevice(int32_t device_id) {
   Device.PendingGlobalsMtx.lock();
   bool hasPendingGlobals = Device.HasPendingGlobals;
   Device.PendingGlobalsMtx.unlock();
-  if (hasPendingGlobals) {
-    if (InitLibrary(Device) != OFFLOAD_SUCCESS) {
-      DP("Failed to init globals on device %d\n", device_id);
-      return OFFLOAD_FAIL;
-    }
+  if (hasPendingGlobals && InitLibrary(Device) != OFFLOAD_SUCCESS) {
+    DP("Failed to init globals on device %d\n", device_id);
+    return OFFLOAD_FAIL;
   }
 
   return OFFLOAD_SUCCESS;

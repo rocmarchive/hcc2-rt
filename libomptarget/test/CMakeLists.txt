@@ -72,7 +72,7 @@ else()
     set(LIBOMPTARGET_TEST_CXX_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang++)
     set(LIBOMPTARGET_FILECHECK ${LLVM_RUNTIME_OUTPUT_INTDIR}/FileCheck)
   else()
-    libomptarget_error_say("Not prepared to run tests on Windows systems.")
+    libomptarget_warning_say("Not prepared to run tests on Windows systems.")
   endif()
   set(LIBOMPTARGET_TEST_OPENMP_FLAG -fopenmp=libomp)
   # Use add_lit_testsuite() from LLVM CMake. This also depends on OpenMP
