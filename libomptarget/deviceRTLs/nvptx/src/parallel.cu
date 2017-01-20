@@ -402,6 +402,10 @@ EXTERN uint16_t __kmpc_parallel_level(kmp_Indent *loc,
     return 0;
 }
 
+// This kmpc call returns the thread id across all teams. It's value is
+// cached by the compiler and used when calling the runtime. On nvptx
+// it's cheap to recalculate this value so we never use the result
+// of this call.
 EXTERN int32_t __kmpc_global_thread_num(kmp_Indent *loc) {
   return GetLogicalThreadIdInBlock();
 }
