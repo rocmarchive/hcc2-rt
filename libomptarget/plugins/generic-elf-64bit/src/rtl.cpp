@@ -47,14 +47,6 @@ struct DynLibTy {
   void *Handle;
 };
 
-/// Account the memory allocated per device.
-struct AllocMemEntryTy {
-  int64_t TotalSize;
-  std::vector<std::pair<void *, int64_t>> Ptrs;
-
-  AllocMemEntryTy() : TotalSize(0) {}
-};
-
 /// Keep entries table per device.
 struct FuncOrGblEntryTy {
   __tgt_target_table Table;

@@ -43,14 +43,6 @@
   {}
 #endif
 
-/// Account the memory allocated per device.
-struct AllocMemEntryTy {
-  int64_t TotalSize;
-  std::vector<std::pair<void *, int64_t>> Ptrs;
-
-  AllocMemEntryTy() : TotalSize(0) {}
-};
-
 /// Keep entries table per device.
 struct FuncOrGblEntryTy {
   __tgt_target_table Table;
@@ -493,7 +485,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
         return NULL;
       }
 
-      err = cuMemcpyDtoH(&ExecModeVal, (CUdeviceptr)ExecModePtr, cusize);
+      err = cuMemcpyDtoH(&ExecModeVal, ExecModePtr, cusize);
       if (err != CUDA_SUCCESS) {
         DP("Error when copying data from device to host. Pointers: "
            "host = " DPxMOD ", device = " DPxMOD ", size = %zd\n",
@@ -681,14 +673,12 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     DP("Using requested number of teams %d\n", team_num);
   }
 
-  int nshared = 0;
-
   // Run on the device.
   DP("Launch kernel with %d blocks and %d threads\n", cudaBlocksPerGrid,
      cudaThreadsPerBlock);
 
   err = cuLaunchKernel(KernelInfo->Func, cudaBlocksPerGrid, 1, 1,
-      cudaThreadsPerBlock, 1, 1, nshared, 0, &args[0], 0);
+      cudaThreadsPerBlock, 1, 1, 0 /*bytes of shared memory*/, 0, &args[0], 0);
   if (err != CUDA_SUCCESS) {
     DP("Device kernel launch failed!\n");
     CUDA_ERR_STRING(err);
@@ -699,14 +689,12 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   DP("Launch of entry point at " DPxMOD " successful!\n",
       DPxPTR(tgt_entry_ptr));
 
-#ifdef OMPTARGET_DEBUG
   if (cudaDeviceSynchronize() != cudaSuccess) {
     DP("Kernel execution error at " DPxMOD ".\n", DPxPTR(tgt_entry_ptr));
     return OFFLOAD_FAIL;
   } else {
     DP("Kernel execution at " DPxMOD " successful!\n", DPxPTR(tgt_entry_ptr));
   }
-#endif
 
   return OFFLOAD_SUCCESS;
 }
