@@ -11,13 +11,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-//#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <dlfcn.h>
-#include <elf.h>
 #include <ffi.h>
 #include <gelf.h>
 #include <link.h>
@@ -37,6 +35,8 @@
 #define GETNAME2(name) #name
 #define GETNAME(name) GETNAME2(name)
 #define DP(...) DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__)
+
+#include "../../common/elf_common.c"
 
 #define NUMBER_OF_DEVICES 4
 #define OFFLOADSECTIONNAME ".omp_offloading.entries"
@@ -118,50 +118,7 @@ int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *image) {
 #if TARGET_ELF_ID < 1
   return 0;
 #else
-  // Is the library version incompatible with the header file?
-  if (elf_version(EV_CURRENT) == EV_NONE) {
-    DP("Incompatible ELF library!\n");
-    return 0;
-  }
-
-  char *img_begin = (char *)image->ImageStart;
-  char *img_end = (char *)image->ImageEnd;
-  size_t img_size = img_end - img_begin;
-
-  // Obtain elf handler
-  Elf *e = elf_memory(img_begin, img_size);
-  if (!e) {
-    DP("Unable to get ELF handle: %s!\n", elf_errmsg(-1));
-    return 0;
-  }
-
-  // Check if ELF is the right kind
-  if (elf_kind(e) != ELF_K_ELF) {
-    DP("Unexpected ELF type!\n");
-    return 0;
-  }
-  Elf64_Ehdr *eh64 = elf64_getehdr(e);
-  Elf32_Ehdr *eh32 = elf32_getehdr(e);
-
-  if (!eh64 && !eh32) {
-    DP("Unable to get machine ID from ELF file!\n");
-    elf_end(e);
-    return 0;
-  }
-
-  uint16_t MachineID;
-  if (eh64 && !eh32)
-    MachineID = eh64->e_machine;
-  else if (eh32 && !eh64)
-    MachineID = eh32->e_machine;
-  else {
-    DP("Ambiguous ELF header!\n");
-    elf_end(e);
-    return 0;
-  }
-  elf_end(e);
-
-  return MachineID == TARGET_ELF_ID;
+  return elf_check_machine(image, TARGET_ELF_ID);
 #endif
 }
 

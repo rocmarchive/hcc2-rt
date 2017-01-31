@@ -19,7 +19,7 @@ if(LIBOMPTARGET_DEP_LIBELF_FOUND)
       # Define the suffix for the runtime messaging dumps.
       add_definitions(-DTARGET_NAME=CUDA)
     
-      if(LIBOMPTARGET_CMAKE_BUILD_TYPE MATCHES Debug)
+      if(LIBOMPTARGET_CMAKE_BUILD_TYPE MATCHES debug)
           add_definitions(-DCUDA_ERROR_REPORT)
       endif()
       
