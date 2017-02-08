@@ -159,7 +159,7 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
       # no other compiler capable of generating bitcode from cuda sources.
       set(CUDA_FLAGS 
           -emit-llvm 
-          -O0 
+          -O1
           -Xclang -target-feature 
           -Xclang +${CUDA_PTX_VERSION} 
           --cuda-device-only 
