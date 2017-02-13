@@ -140,7 +140,7 @@ typedef enum kmp_sched_t {
 typedef void kmp_Indent;
 typedef void (*kmp_ParFctPtr)(int32_t *global_tid, int32_t *bound_tid, ...);
 typedef void (*kmp_ReductFctPtr)(void *lhsData, void *rhsData);
-typedef void (*kmp_InterWarpCopyFctPtr)(void* src, int warp_num);
+typedef void (*kmp_InterWarpCopyFctPtr)(void* src, int32_t warp_num);
 typedef void (*kmp_ShuffleReductFctPtr)(void *rhsData, int16_t lane_id, int16_t lane_offset, int16_t shortCircuit);
 typedef void (*kmp_CopyToScratchpadFctPtr)(void *reduceData, void * scratchpad, int32_t index, int32_t width);
 typedef void (*kmp_LoadReduceFctPtr)(void *reduceData, void * scratchpad, int32_t index, int32_t width, int32_t reduce);
