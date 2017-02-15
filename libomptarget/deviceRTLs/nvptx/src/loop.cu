@@ -13,10 +13,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptx.h"
-
-EXTERN void CompleteCG(omptarget_nvptx_CounterGroup &cg, Counter *priv,
-                       Counter n);
+#include "omptarget-nvptx.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////

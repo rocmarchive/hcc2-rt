@@ -11,19 +11,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <assert.h>
+#include <cassert>
 #include <cstdio>
+#include <cstring>
+#include <cstdlib>
 #include <dlfcn.h>
-#include <elf.h>
 #include <ffi.h>
 #include <gelf.h>
-#include <list>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <vector>
 #include <link.h>
+#include <list>
+#include <vector>
 
 #include "omptarget.h"
 
@@ -39,6 +36,8 @@
 #define GETNAME(name) GETNAME2(name)
 #define DP(...) DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__)
 
+#include "../../common/elf_common.c"
+
 #define NUMBER_OF_DEVICES 4
 #define OFFLOADSECTIONNAME ".omp_offloading.entries"
 
@@ -46,14 +45,6 @@
 struct DynLibTy {
   char *FileName;
   void *Handle;
-};
-
-/// Account the memory allocated per device.
-struct AllocMemEntryTy {
-  int64_t TotalSize;
-  std::vector<std::pair<void *, int64_t>> Ptrs;
-
-  AllocMemEntryTy() : TotalSize(0) {}
 };
 
 /// Keep entries table per device.
@@ -107,13 +98,12 @@ public:
 
   ~RTLDeviceInfoTy() {
     // Close dynamic libraries
-    for (std::list<DynLibTy>::iterator ii = DynLibs.begin(),
-                                       ie = DynLibs.begin();
-         ii != ie; ++ii)
-      if (ii->Handle) {
-        dlclose(ii->Handle);
-        remove(ii->FileName);
+    for (auto &lib : DynLibs) {
+      if (lib.Handle) {
+        dlclose(lib.Handle);
+        remove(lib.FileName);
       }
+    }
   }
 };
 
@@ -128,50 +118,7 @@ int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *image) {
 #if TARGET_ELF_ID < 1
   return 0;
 #else
-  // Is the library version incompatible with the header file?
-  if (elf_version(EV_CURRENT) == EV_NONE) {
-    DP("Incompatible ELF library!\n");
-    return 0;
-  }
-
-  char *img_begin = (char *)image->ImageStart;
-  char *img_end = (char *)image->ImageEnd;
-  size_t img_size = img_end - img_begin;
-
-  // Obtain elf handler
-  Elf *e = elf_memory(img_begin, img_size);
-  if (!e) {
-    DP("Unable to get ELF handle: %s!\n", elf_errmsg(-1));
-    return 0;
-  }
-
-  // Check if ELF is the right kind
-  if (elf_kind(e) != ELF_K_ELF) {
-    DP("Unexpected ELF type!\n");
-    return 0;
-  }
-  Elf64_Ehdr *eh64 = elf64_getehdr(e);
-  Elf32_Ehdr *eh32 = elf32_getehdr(e);
-
-  if (!eh64 && !eh32) {
-    DP("Unable to get machine ID from ELF file!\n");
-    elf_end(e);
-    return 0;
-  }
-
-  uint16_t MachineID;
-  if (eh64 && !eh32)
-    MachineID = eh64->e_machine;
-  else if (eh32 && !eh64)
-    MachineID = eh32->e_machine;
-  else {
-    DP("Ambiguous ELF header!\n");
-    elf_end(e);
-    return 0;
-  }
-  elf_end(e);
-
-  return MachineID == TARGET_ELF_ID;
+  return elf_check_machine(image, TARGET_ELF_ID);
 #endif
 }
 
@@ -182,14 +129,14 @@ int32_t __tgt_rtl_init_device(int32_t device_id) { return OFFLOAD_SUCCESS; }
 __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
                                           __tgt_device_image *image) {
 
-  DP("Dev %d: load binary from 0x%llx image\n", device_id,
-     (long long)image->ImageStart);
+  DP("Dev %d: load binary from " DPxMOD " image\n", device_id,
+     DPxPTR(image->ImageStart));
 
   assert(device_id >= 0 && device_id < NUMBER_OF_DEVICES && "bad dev id");
 
   size_t ImageSize = (size_t)image->ImageEnd - (size_t)image->ImageStart;
   size_t NumEntries = (size_t)(image->EntriesEnd - image->EntriesBegin);
-  DP("Expecting to have %ld entries defined.\n", (long)NumEntries);
+  DP("Expecting to have %zd entries defined.\n", NumEntries);
 
   // Is the library version incompatible with the header file?
   if (elf_version(EV_CURRENT) == EV_NONE) {
@@ -238,7 +185,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
     return NULL;
   }
 
-  DP("Offset of entries section is (%016lx).\n", entries_offset);
+  DP("Offset of entries section is (" DPxMOD ").\n", DPxPTR(entries_offset));
 
   // load dynamic library and get the entry points. We use the dl library
   // to do the loading of the library, but we could do it directly to avoid the
@@ -267,10 +214,12 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   DynLibTy Lib = {tmp_name, dlopen(tmp_name, RTLD_LAZY)};
 
   if (!Lib.Handle) {
-    DP("target library loading error: %s\n", dlerror());
+    DP("Target library loading error: %s\n", dlerror());
     elf_end(e);
     return NULL;
   }
+
+  DeviceInfo.DynLibs.push_back(Lib);
 
   struct link_map *libInfo = (struct link_map *)Lib.Handle;
 
@@ -278,7 +227,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   // plus the offset determined from the ELF file.
   Elf64_Addr entries_addr = libInfo->l_addr + entries_offset;
 
-  DP("Pointer to first entry to be loaded is (%016lx).\n", entries_addr);
+  DP("Pointer to first entry to be loaded is (" DPxMOD ").\n",
+      DPxPTR(entries_addr));
 
   // Table of pointers to all the entries in the target.
   __tgt_offload_entry *entries_table = (__tgt_offload_entry *)entries_addr;
@@ -292,8 +242,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
     return NULL;
   }
 
-  DP("Entries table range is (%016lx)->(%016lx)\n", (Elf64_Addr)entries_begin,
-     (Elf64_Addr)entries_end)
+  DP("Entries table range is (" DPxMOD ")->(" DPxMOD ")\n",
+      DPxPTR(entries_begin), DPxPTR(entries_end));
   DeviceInfo.createOffloadTable(device_id, entries_begin, entries_end);
 
   elf_end(e);
@@ -324,9 +274,8 @@ int32_t __tgt_rtl_data_delete(int32_t device_id, void *tgt_ptr) {
 }
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
-                                         void **tgt_args, int32_t arg_num,
-                                         int32_t team_num,
-                                         int32_t thread_limit) {
+    void **tgt_args, int32_t arg_num, int32_t team_num, int32_t thread_limit,
+    uint64_t loop_tripcount /*not used*/) {
   // ignore team num and thread limit.
 
   // Use libffi to launch execution.
@@ -347,7 +296,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   if (status != FFI_OK)
     return OFFLOAD_FAIL;
 
-  DP("Running entry point at %016lx...\n", (Elf64_Addr)tgt_entry_ptr);
+  DP("Running entry point at " DPxMOD "...\n", DPxPTR(tgt_entry_ptr));
 
   ffi_call(&cif, FFI_FN(tgt_entry_ptr), NULL, &args[0]);
   return OFFLOAD_SUCCESS;
@@ -357,7 +306,7 @@ int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
                                     void **tgt_args, int32_t arg_num) {
   // use one team and one thread.
   return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-                                          arg_num, 1, 1);
+                                          arg_num, 1, 1, 0);
 }
 
 #ifdef __cplusplus

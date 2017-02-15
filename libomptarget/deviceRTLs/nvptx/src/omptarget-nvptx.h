@@ -24,11 +24,11 @@
 #include <math.h>
 
 // local includes
-#include "../../../deviceRTLs/nvptx/src/option.h" // choices we have
-#include "../../../deviceRTLs/nvptx/src/counter_group.h"
-#include "../../../deviceRTLs/nvptx/src/debug.h" // debug
-#include "../../../deviceRTLs/nvptx/src/interface.h" // interfaces with omp, compiler, and user
-#include "../../../deviceRTLs/nvptx/src/support.h"
+#include "option.h" // choices we have
+#include "counter_group.h"
+#include "debug.h" // debug
+#include "interface.h" // interfaces with omp, compiler, and user
+#include "support.h"
 
 #define OMPTARGET_NVPTX_VERSION 1.1
 
@@ -219,8 +219,8 @@ private:
       workDescrForActiveParallel; // one, ONLY for the active par
   omp_lock_t criticalLock;
 
-  __kmpc_data_sharing_worker_slot_static worker_rootS[DS_Max_Worker_Warp_Size - 1];
-  __kmpc_data_sharing_master_slot_static master_rootS[1];
+  __align__(16) __kmpc_data_sharing_worker_slot_static worker_rootS[DS_Max_Worker_Warp_Size - 1];
+  __align__(16) __kmpc_data_sharing_master_slot_static master_rootS[1];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -324,8 +324,8 @@ INLINE omptarget_nvptx_TaskDescr *getMyTopTaskDescriptor(int globalThreadId);
 // inlined implementation
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "../../../deviceRTLs/nvptx/src/supporti.h"
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptxi.h"
-#include "../../../deviceRTLs/nvptx/src/counter_groupi.h"
+#include "supporti.h"
+#include "omptarget-nvptxi.h"
+#include "counter_groupi.h"
 
 #endif

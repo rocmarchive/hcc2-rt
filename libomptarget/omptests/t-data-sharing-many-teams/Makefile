@@ -1,6 +1,10 @@
 include ../Makefile.defs
 
-EXTRAFLAGS := -O0 -fno-exceptions
+ifeq ($(OMPTESTS_CUDA_COMPUTE_CAPABILITY),60)
+        EXTRAFLAGS += --cuda-noopt-device-debug
+endif
+
+EXTRAFLAGS += -O0 -fno-exceptions
 
 ################################################################################
 #

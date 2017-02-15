@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptx.h"
-#include "../../../deviceRTLs/nvptx/src/state-queue.h"
+#include "omptarget-nvptx.h"
+#include "state-queue.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // global data tables

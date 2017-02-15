@@ -61,9 +61,9 @@ if(${LIBOMPTARGET_STANDALONE_BUILD})
     ${cmake_3_2_USES_TERMINAL}
   )
   
-  set(LIBOMPTARGET_OPENMP_HEADER_FOLDER "" CACHE STRING
+  set(LIBOMPTARGET_OPENMP_HEADER_FOLDER "${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src" CACHE STRING
     "Path to folder containing omp.h")
-  set(LIBOMPTARGET_OPENMP_HOST_RTL_FOLDER "" CACHE STRING
+  set(LIBOMPTARGET_OPENMP_HOST_RTL_FOLDER "${CMAKE_CURRENT_BINARY_DIR}/../../runtime/src" CACHE STRING
     "Path to folder containing libomp.so")
 else()
   # LLVM source tree build, test just-built clang
@@ -72,7 +72,7 @@ else()
     set(LIBOMPTARGET_TEST_CXX_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang++)
     set(LIBOMPTARGET_FILECHECK ${LLVM_RUNTIME_OUTPUT_INTDIR}/FileCheck)
   else()
-    libomptarget_error_say("Not prepared to run tests on Windows systems.")
+    libomptarget_warning_say("Not prepared to run tests on Windows systems.")
   endif()
   set(LIBOMPTARGET_TEST_OPENMP_FLAG -fopenmp=libomp)
   # Use add_lit_testsuite() from LLVM CMake. This also depends on OpenMP

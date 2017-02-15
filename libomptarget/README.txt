@@ -57,7 +57,7 @@ Front-end Compilers that work with this RTL
 
 The following compilers are known to do compatible code generation for
 this RTL: 
-  - clang (from the OpenMP development branch at http://clang-omp.github.io/ )
+  - clang (from https://github.com/clang-ykt )
   - clang (development branch at http://clang.llvm.org - several features still 
     under development)
 

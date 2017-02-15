@@ -33,7 +33,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptx.h"
+#include "omptarget-nvptx.h"
 
 typedef struct ConvergentSimdJob {
   omptarget_nvptx_TaskDescr taskDescr;

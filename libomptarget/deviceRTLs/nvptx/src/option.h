@@ -47,8 +47,13 @@
 #define L1_BARRIER (1)
 
 // Maximum number of omp state objects per SM allocated statically in global memory.
+#if __CUDA_ARCH__ >= 600
+#define OMP_STATE_COUNT 32
+#define MAX_SM 56
+#else
 #define OMP_STATE_COUNT 16
 #define MAX_SM 16
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // algo options

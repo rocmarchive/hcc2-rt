@@ -237,8 +237,10 @@ EXTERN void __kmpc_data_sharing_environment_end(
       // The master thread cleans the saved slot, because this is an environment only for the master.
       __kmpc_data_sharing_slot *S = IsMasterThread() ? *SavedSharedSlot : DataSharingState.SlotPtr[WID];
 
-      if (S->Next)
+      if (S->Next) {
         free(S->Next);
+        S->Next = 0;
+      }
     }
 
     DSPRINT0(DSFLAG,"Exiting Exiting __kmpc_data_sharing_environment_end\n");

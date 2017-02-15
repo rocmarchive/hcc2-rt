@@ -28,7 +28,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "../../../deviceRTLs/nvptx/src/omptarget-nvptx.h"
+#include "omptarget-nvptx.h"
 
 EXTERN kmp_TaskDescr *__kmpc_omp_task_alloc(
     kmp_Indent *loc,     // unused

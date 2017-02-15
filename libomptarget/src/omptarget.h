@@ -12,10 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <stdint.h>
-
 #ifndef _OMPTARGET_H_
 #define _OMPTARGET_H_
+
+#include <stdint.h>
 
 #define OFFLOAD_SUCCESS (0)
 #define OFFLOAD_FAIL (~0)
@@ -47,16 +47,18 @@ enum tgt_map_type {
   OMP_TGT_MAPTYPE_PRIVATE         = 0x080,
   // copy by value - not mapped
   OMP_TGT_MAPTYPE_LITERAL         = 0x100,
+  // mapping is implicit
+  OMP_TGT_MAPTYPE_IMPLICIT        = 0x200,
   // member of struct, member given by 4 MSBs - 1
   OMP_TGT_MAPTYPE_MEMBER_OF       = 0xffff000000000000
 };
 
 enum OpenMPOffloadingDeclareTargetFlags {
-  /// Mark the entry has having a 'link' attribute.
+  /// Mark the entry as having a 'link' attribute.
   OMP_DECLARE_TARGET_LINK = 0x01,
-  /// Mark the entry has being a global constructor.
+  /// Mark the entry as being a global constructor.
   OMP_DECLARE_TARGET_CTOR = 0x02,
-  /// Mark the entry has being a global destructor.
+  /// Mark the entry as being a global destructor.
   OMP_DECLARE_TARGET_DTOR = 0x04
 };
 
@@ -81,10 +83,10 @@ struct __tgt_device_image {
 /// This struct is a record of all the host code that may be offloaded to a
 /// target.
 struct __tgt_bin_desc {
-  int32_t NumDevices;                // Number of device types supported
+  int32_t NumDeviceImages;           // Number of device types supported
   __tgt_device_image *DeviceImages;  // Array of device images (1 per dev. type)
-  __tgt_offload_entry *EntriesBegin; // Begin of table with all host entries
-  __tgt_offload_entry *EntriesEnd;   // End of table (non inclusive)
+  __tgt_offload_entry *HostEntriesBegin; // Begin of table with all host entries
+  __tgt_offload_entry *HostEntriesEnd;   // End of table (non inclusive)
 };
 
 /// This struct contains the offload entries identified by the target runtime
@@ -158,12 +160,12 @@ void __tgt_target_data_update_nowait(int32_t device_id, int32_t arg_num,
                                      int32_t noAliasDepNum,
                                      void *noAliasDepList);
 
-// performs the same actions as data_begin in case arg_num is non-zero
+// Performs the same actions as data_begin in case arg_num is non-zero
 // and initiates run of offloaded region on target platform; if arg_num
 // is non-zero after the region execution is done it also performs the
-// same action as data_update and data_end above. The following types are
-// used; this function returns 0 if it was able to transfer the execution
-// to a target and an int different from zero otherwise
+// same action as data_end above. The following types are used; this
+// function returns 0 if it was able to transfer the execution to a
+// target and an int different from zero otherwise.
 int __tgt_target(int32_t device_id, void *host_ptr, int32_t arg_num,
                  void **args_base, void **args, int64_t *arg_sizes,
                  int32_t *arg_types);
@@ -189,11 +191,35 @@ void __kmpc_push_target_tripcount(int32_t device_id, uint64_t loop_tripcount);
 #endif
 
 #ifdef OMPTARGET_DEBUG
+#include <stdio.h>
 #define DEBUGP(prefix, ...)                                                    \
   {                                                                            \
     fprintf(stderr, "%s --> ", prefix);                                        \
     fprintf(stderr, __VA_ARGS__);                                              \
   }
+
+#include <inttypes.h>
+#define DPxMOD "0x%0*" PRIxPTR
+#define DPxPTR(ptr) ((int)(2*sizeof(uintptr_t))), ((uintptr_t) (ptr))
+
+/*
+ * To printf a pointer in hex with a fixed width of 16 digits and a leading 0x,
+ * use printf("ptr=" DPxMOD "...\n", DPxPTR(ptr));
+ *
+ * DPxMOD expands to:
+ *   "0x%0*" PRIxPTR
+ * where PRIxPTR expands to an appropriate modifier for the type uintptr_t on a
+ * specific platform, e.g. "lu" if uintptr_t is typedef'd as unsigned long:
+ *   "0x%0*lu"
+ *
+ * Ultimately, the whole statement expands to:
+ *   printf("ptr=0x%0*lu...\n",  // the 0* modifier expects an extra argument
+ *                               // specifying the width of the output
+ *   (int)(2*sizeof(uintptr_t)), // the extra argument specifying the width
+ *                               // 8 digits for 32bit systems
+ *                               // 16 digits for 64bit
+ *   (uintptr_t) ptr);
+ */
 #else
 #define DEBUGP(prefix, ...)                                                    \
   {}
