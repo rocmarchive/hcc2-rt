@@ -35,7 +35,8 @@
 static const char *RTLNames[] = {
     /* PowerPC target */ "libomptarget.rtl.ppc64.so",
     /* x86_64 target  */ "libomptarget.rtl.x86_64.so",
-    /* CUDA target    */ "libomptarget.rtl.cuda.so"};
+    /* CUDA target    */ "libomptarget.rtl.cuda.so",
+    /* AArch64 target */ "libomptarget.rtl.aarch64.so"};
 
 // forward declarations
 struct RTLInfoTy;
@@ -2339,3 +2340,4 @@ EXTERN void __kmpc_kernel_print(char *title) { DP(" %s\n", title); }
 EXTERN void __kmpc_kernel_print_int8(char *title, int64_t data) {
   DP(" %s val=%" PRId64 "\n", title, data);
 }
+

@@ -24,6 +24,7 @@ if(LIBOMPTARGET_DEP_LIBELF_FOUND)
       endif()
       
       include_directories(${LIBOMPTARGET_DEP_CUDA_INCLUDE_DIRS})
+      include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS})
     
       add_library(omptarget.rtl.cuda SHARED src/rtl.cpp)
       
@@ -47,3 +48,4 @@ if(LIBOMPTARGET_DEP_LIBELF_FOUND)
 else(LIBOMPTARGET_DEP_LIBELF_FOUND)
   libomptarget_say("Not building CUDA offloading plugin: libelf dependency not found.")
 endif(LIBOMPTARGET_DEP_LIBELF_FOUND)
+
