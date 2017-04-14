@@ -90,7 +90,7 @@ static pthread_mutexattr_t __kmp_suspend_mutex_attr;
 static kmp_cond_align_t    __kmp_wait_cv;
 static kmp_mutex_align_t   __kmp_wait_mx;
 
-double __kmp_ticks_per_nsec;
+kmp_uint64 __kmp_ticks_per_msec = 1000000;
 
 /* ------------------------------------------------------------------------ */
 /* ------------------------------------------------------------------------ */
@@ -428,7 +428,7 @@ __kmp_test_then_and32( volatile kmp_int32 *p, kmp_int32 d )
     return old_value;
 }
 
-# if KMP_ARCH_X86 || KMP_ARCH_PPC64 || (KMP_OS_LINUX && KMP_ARCH_AARCH64)
+# if KMP_ARCH_X86
 kmp_int8
 __kmp_test_then_add8( volatile kmp_int8 *p, kmp_int8 d )
 {
@@ -462,7 +462,7 @@ __kmp_test_then_add64( volatile kmp_int64 *p, kmp_int64 d )
     }
     return old_value;
 }
-# endif /* KMP_ARCH_X86 || KMP_ARCH_PPC64 || (KMP_OS_LINUX && KMP_ARCH_AARCH64) */
+# endif /* KMP_ARCH_X86 */
 
 kmp_int64
 __kmp_test_then_or64( volatile kmp_int64 *p, kmp_int64 d )
@@ -1812,13 +1812,16 @@ __kmp_resume_monitor()
 void
 __kmp_yield( int cond )
 {
-    if (cond
+    if (!cond)
+        return;
 #if KMP_USE_MONITOR
-        && __kmp_yielding_on
+    if (!__kmp_yielding_on)
+        return;
+#else
+    if (__kmp_yield_cycle && !KMP_YIELD_NOW())
+        return;
 #endif
-    ) {
-        sched_yield();
-    }
+    sched_yield();
 }
 
 /* ------------------------------------------------------------------------ */
@@ -2154,7 +2157,7 @@ __kmp_now_nsec()
 }
 
 #if KMP_ARCH_X86 || KMP_ARCH_X86_64
-/* Measure clock tick per nanosecond */
+/* Measure clock ticks per millisecond */
 void
 __kmp_initialize_system_tick()
 {
@@ -2163,7 +2166,7 @@ __kmp_initialize_system_tick()
     kmp_uint64 goal = __kmp_hardware_timestamp() + delay;
     kmp_uint64 now;
     while ((now = __kmp_hardware_timestamp()) < goal);
-    __kmp_ticks_per_nsec = 1.0 * (delay + (now - goal)) / (__kmp_now_nsec() - nsec);
+    __kmp_ticks_per_msec = (kmp_uint64)(1e6 * (delay + (now - goal)) / (__kmp_now_nsec() - nsec));
 }
 #endif
 
