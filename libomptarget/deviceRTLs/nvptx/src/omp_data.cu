@@ -31,7 +31,7 @@ __device__ __shared__ omptarget_nvptx_ThreadPrivateContext
 // communicate with the workers.  Since it is in shared memory, there is one
 // copy of these variables for each kernel, instance, and team.
 ////////////////////////////////////////////////////////////////////////////////
-__device__ __shared__ omptarget_nvptx_WorkFn   omptarget_nvptx_workFn;
+volatile __device__ __shared__ omptarget_nvptx_WorkFn   omptarget_nvptx_workFn;
 
 ////////////////////////////////////////////////////////////////////////////////
 // OpenMP kernel execution mode

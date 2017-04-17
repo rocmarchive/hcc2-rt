@@ -309,7 +309,7 @@ extern __device__ __shared__ int8_t execution_mode;
 ////////////////////////////////////////////////////////////////////////////////
 
 typedef void * omptarget_nvptx_WorkFn;
-extern __device__ __shared__ omptarget_nvptx_WorkFn   omptarget_nvptx_workFn;
+extern volatile __device__ __shared__ omptarget_nvptx_WorkFn   omptarget_nvptx_workFn;
 
 ////////////////////////////////////////////////////////////////////////////////
 // get private data structures

@@ -30,7 +30,7 @@ extern __device__ __shared__ omptarget_nvptx_ThreadPrivateContext
 // variables to communicate with the workers.  Since they are in shared memory,
 // there is one copy of these variables for each kernel, instance, and team.
 //
-extern __device__ __shared__ omptarget_nvptx_WorkFn   omptarget_nvptx_workFn;
+extern volatile __device__ __shared__ omptarget_nvptx_WorkFn   omptarget_nvptx_workFn;
 extern __device__ __shared__ int8_t execution_mode;
 
 ////////////////////////////////////////////////////////////////////////////////
