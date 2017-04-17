@@ -99,24 +99,41 @@ INLINE int GetLogicalThreadIdInBlock() {
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-INLINE int GetOmpThreadId(int threadId) {
+INLINE int GetOmpThreadId(int threadId,
+                          bool isSPMDExecutionMode,
+                          bool isRuntimeUninitialized) {
   // omp_thread_num
-  omptarget_nvptx_TaskDescr *currTaskDescr =
-      omptarget_nvptx_threadPrivateContext->GetTopLevelTaskDescr(
-          threadId);
-  int rc = currTaskDescr->ThreadId();
+  int rc;
+
+  if (isRuntimeUninitialized) {
+    rc = GetThreadIdInBlock();
+    if (!isSPMDExecutionMode && rc >= GetMasterThreadID())
+      rc = 0;
+  } else {
+    omptarget_nvptx_TaskDescr *currTaskDescr =
+        omptarget_nvptx_threadPrivateContext->GetTopLevelTaskDescr(threadId);
+    rc = currTaskDescr->ThreadId();
+  }
   return rc;
 }
 
-INLINE int GetNumberOfOmpThreads(int threadId) {
+INLINE int GetNumberOfOmpThreads(int threadId,
+                                 bool isSPMDExecutionMode,
+                                 bool isRuntimeUninitialized) {
   // omp_num_threads
-  omptarget_nvptx_TaskDescr *currTaskDescr =
-      omptarget_nvptx_threadPrivateContext->GetTopLevelTaskDescr(
-          threadId);
+  int rc;
 
-  ASSERT0(LT_FUSSY, currTaskDescr, "expected a top task descr");
+  if (isRuntimeUninitialized) {
+    rc = isSPMDExecutionMode ? GetNumberOfThreadsInBlock()
+                             : GetNumberOfThreadsInBlock() - warpSize;
+  } else {
+    omptarget_nvptx_TaskDescr *currTaskDescr =
+        omptarget_nvptx_threadPrivateContext->GetTopLevelTaskDescr(
+            threadId);
+    ASSERT0(LT_FUSSY, currTaskDescr, "expected a top task descr");
+    rc = currTaskDescr->ThreadsInTeam();
+  }
 
-  int rc = currTaskDescr->ThreadsInTeam();
   return rc;
 }
 

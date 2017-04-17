@@ -41,7 +41,7 @@ EXTERN void omp_set_num_threads(int num) {
 
 EXTERN int omp_get_num_threads(void) {
   int tid = GetLogicalThreadIdInBlock();
-  int rc = GetNumberOfOmpThreads(tid);
+  int rc = GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized());
   PRINT(LD_IO, "call omp_get_num_threads() return %d\n", rc);
   return rc;
 }
@@ -68,7 +68,7 @@ EXTERN int omp_get_thread_limit(void) {
 
 EXTERN int omp_get_thread_num() {
   int tid = GetLogicalThreadIdInBlock();
-  int rc = GetOmpThreadId(tid);
+  int rc = GetOmpThreadId(tid, isSPMDMode(), isRuntimeUninitialized());
   PRINT(LD_IO, "call omp_get_thread_num() returns %d\n", rc);
   return rc;
 }

@@ -48,11 +48,13 @@ INLINE int GetMasterThreadID();
 INLINE int GetNumberOfWorkersInTeam();
 
 // get OpenMP thread and team ids
-INLINE int GetOmpThreadId(int threadId); // omp_thread_num
+INLINE int GetOmpThreadId(int threadId, bool isSPMDExecutionMode,
+                          bool isRuntimeUninitialized); // omp_thread_num
 INLINE int GetOmpTeamId();               // omp_team_num
 
 // get OpenMP number of threads and team
-INLINE int GetNumberOfOmpThreads(int threadId); // omp_num_threads
+INLINE int GetNumberOfOmpThreads(int threadId, bool isSPMDExecutionMode,
+                                 bool isRuntimeUninitialized); // omp_num_threads
 INLINE int GetNumberOfOmpTeams();               // omp_num_teams
 
 // get OpenMP number of procs
