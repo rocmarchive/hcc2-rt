@@ -358,6 +358,9 @@ EXTERN int32_t __kmpc_shuffle_int32(int32_t val, int16_t delta, int16_t size);
 EXTERN int64_t __kmpc_shuffle_int64(int64_t val, int16_t delta, int16_t size);
 
 // sync barrier
+EXTERN void __kmpc_barrier(kmp_Indent *loc_ref, int32_t tid);
+EXTERN void __kmpc_barrier_simple_spmd(kmp_Indent *loc_ref, int32_t tid);
+EXTERN void __kmpc_barrier_simple_generic(kmp_Indent *loc_ref, int32_t tid);
 EXTERN int32_t __kmpc_cancel_barrier(kmp_Indent *loc, int32_t global_tid);
 
 // single
