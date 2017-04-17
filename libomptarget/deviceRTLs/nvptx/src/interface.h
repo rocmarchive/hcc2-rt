@@ -245,7 +245,6 @@ EXTERN void __kmpc_for_static_init_8u(kmp_Indent *loc, int32_t global_tid,
                                       uint64_t *plower, uint64_t *pupper,
                                       int64_t *pstride, int64_t incr,
                                       int64_t chunk);
-
 EXTERN
 void __kmpc_for_static_init_4_simple_spmd(kmp_Indent *loc, int32_t global_tid,
                                           int32_t sched, int32_t *plastiter,
@@ -343,17 +342,28 @@ EXTERN int32_t __kmpc_nvptx_parallel_reduce_nowait(int32_t global_tid,
                              int32_t num_vars, size_t reduce_size,
                              void *reduce_data, kmp_ShuffleReductFctPtr shflFct,
                              kmp_InterWarpCopyFctPtr cpyFct);
+EXTERN int32_t __kmpc_nvptx_parallel_reduce_nowait_simple_spmd(
+    int32_t global_tid, int32_t num_vars, size_t reduce_size, void *reduce_data,
+    kmp_ShuffleReductFctPtr shflFct, kmp_InterWarpCopyFctPtr cpyFct);
+EXTERN int32_t __kmpc_nvptx_parallel_reduce_nowait_simple_generic(
+    int32_t global_tid, int32_t num_vars, size_t reduce_size, void *reduce_data,
+    kmp_ShuffleReductFctPtr shflFct, kmp_InterWarpCopyFctPtr cpyFct);
 EXTERN int32_t __kmpc_nvptx_simd_reduce_nowait(int32_t global_tid,
                              int32_t num_vars, size_t reduce_size,
                              void *reduce_data, kmp_ShuffleReductFctPtr shflFct,
                              kmp_InterWarpCopyFctPtr cpyFct);
-EXTERN int32_t __kmpc_nvptx_teams_reduce_nowait(int32_t global_tid,
-                             int32_t num_vars, size_t reduce_size,
-                             void *reduce_data,
-                             kmp_ShuffleReductFctPtr shflFct,
-                             kmp_InterWarpCopyFctPtr cpyFct,
-                             kmp_CopyToScratchpadFctPtr sratchFct,
-                             kmp_LoadReduceFctPtr ldFct);
+EXTERN int32_t __kmpc_nvptx_teams_reduce_nowait(
+    int32_t global_tid, int32_t num_vars, size_t reduce_size, void *reduce_data,
+    kmp_ShuffleReductFctPtr shflFct, kmp_InterWarpCopyFctPtr cpyFct,
+    kmp_CopyToScratchpadFctPtr sratchFct, kmp_LoadReduceFctPtr ldFct);
+EXTERN int32_t __kmpc_nvptx_teams_reduce_nowait_simple_spmd(
+    int32_t global_tid, int32_t num_vars, size_t reduce_size, void *reduce_data,
+    kmp_ShuffleReductFctPtr shflFct, kmp_InterWarpCopyFctPtr cpyFct,
+    kmp_CopyToScratchpadFctPtr sratchFct, kmp_LoadReduceFctPtr ldFct);
+EXTERN int32_t __kmpc_nvptx_teams_reduce_nowait_simple_generic(
+    int32_t global_tid, int32_t num_vars, size_t reduce_size, void *reduce_data,
+    kmp_ShuffleReductFctPtr shflFct, kmp_InterWarpCopyFctPtr cpyFct,
+    kmp_CopyToScratchpadFctPtr sratchFct, kmp_LoadReduceFctPtr ldFct);
 EXTERN int32_t __kmpc_shuffle_int32(int32_t val, int16_t delta, int16_t size);
 EXTERN int64_t __kmpc_shuffle_int64(int64_t val, int16_t delta, int16_t size);
 
