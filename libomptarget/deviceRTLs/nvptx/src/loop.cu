@@ -94,25 +94,30 @@ public:
 
   INLINE static void for_static_init(int32_t schedtype, int32_t *plastiter,
                                      T *plower, T *pupper,
-                                     ST *pstride, ST chunk) {
+                                     ST *pstride, ST chunk,
+                                     bool IsSPMDExecutionMode,
+                                     bool IsOMPRuntimeUnavailable = false) {
+    // When IsOMPRuntimeUnavailable is true, we assume that the caller is
+    // in an L0 parallel region and that all worker threads participate.
+
     int tid = GetLogicalThreadIdInBlock();
 
     // Assume we are in teams region or that we use a single block
     // per target region
-    ST numberOfActiveOMPThreads =
-        isNoOMPMode() ? GetNumberOfThreadsInBlock() : GetNumberOfOmpThreads(tid);
+    ST numberOfActiveOMPThreads = GetNumberOfOmpThreads(
+        tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
 
     // All warps that are in excess of the maximum requested, do
     // not execute the loop
     PRINT(LD_LOOP, "OMP Thread %d: schedule type %d, chunk size = %lld, mytid "
                    "%d, num tids %d\n",
-          isNoOMPMode() ? GetThreadIdInBlock() : GetOmpThreadId(tid),
+          GetOmpThreadId(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable),
           schedtype, P64(chunk),
-          isNoOMPMode() ? GetThreadIdInBlock() : GetOmpThreadId(tid),
-          isNoOMPMode() ? GetNumberOfThreadsInBlock() : GetNumberOfOmpThreads(tid));
+          GetOmpThreadId(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable),
+          GetNumberOfOmpThreads(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable));
     ASSERT0(LT_FUSSY,
-            (isNoOMPMode() ? GetThreadIdInBlock() : GetOmpThreadId(tid)) <
-            (isNoOMPMode() ? GetNumberOfThreadsInBlock() : GetNumberOfOmpThreads(tid)),
+            (GetOmpThreadId(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable)) <
+            (GetNumberOfOmpThreads(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable)),
             "current thread is not needed here; error");
 
     // copy
@@ -125,27 +130,15 @@ public:
     switch (schedtype) {
     case kmp_sched_static_chunk: {
       if (chunk > 0) {
-        // If in no-OMP mode, don't reference the OMP runtime.
-        if (isNoOMPMode()) {
-          entityId = GetThreadIdInBlock();
-          numberOfEntities = GetNumberOfThreadsInBlock();
-        } else {
-          entityId = GetOmpThreadId(tid);
-          numberOfEntities = GetNumberOfOmpThreads(tid);
-        }
+        entityId = GetOmpThreadId(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
+        numberOfEntities = GetNumberOfOmpThreads(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
         ForStaticChunk(lastiter, lb, ub, stride, chunk, entityId, numberOfEntities);
         break;
       }
     } // note: if chunk <=0, use nochunk
     case kmp_sched_static_nochunk: {
-      // If in no-OMP mode, don't reference the OMP runtime.
-      if (isNoOMPMode()) {
-        entityId = GetThreadIdInBlock();
-        numberOfEntities = GetNumberOfThreadsInBlock();
-      } else {
-        entityId = GetOmpThreadId(tid);
-        numberOfEntities = GetNumberOfOmpThreads(tid);
-      }
+      entityId = GetOmpThreadId(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
+      numberOfEntities = GetNumberOfOmpThreads(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
       ForStaticNoChunk(lastiter, lb, ub, stride, chunk, entityId, numberOfEntities);
       break;
     }
@@ -165,15 +158,14 @@ public:
       break;
     }
     case kmp_sched_distr_static_chunk_sched_static_chunkone: {
-      // If in no-OMP mode, don't reference the OMP runtime.
-      if (isNoOMPMode()) {
-        entityId = GetNumberOfThreadsInBlock() * GetBlockIdInKernel() + GetThreadIdInBlock();
-        numberOfEntities = GetNumberOfBlocksInKernel() * GetNumberOfThreadsInBlock();
-      } else {
-        entityId = GetNumberOfOmpThreads(tid) * GetOmpTeamId() + GetOmpThreadId(tid);
-        numberOfEntities = GetNumberOfOmpTeams() * GetNumberOfOmpThreads(tid);
-      }
-
+      entityId =
+          GetNumberOfOmpThreads(tid, IsSPMDExecutionMode,
+                                IsOMPRuntimeUnavailable) *
+              GetOmpTeamId() +
+          GetOmpThreadId(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
+      numberOfEntities = GetNumberOfOmpTeams() *
+                         GetNumberOfOmpThreads(tid, IsSPMDExecutionMode,
+                                               IsOMPRuntimeUnavailable);
       ForStaticChunk(lastiter, lb, ub, stride, chunk, entityId, numberOfEntities);
       break;
     }
@@ -181,8 +173,8 @@ public:
       ASSERT(LT_FUSSY, FALSE, "unknown schedtype %d", schedtype);
       PRINT(LD_LOOP, "unknown schedtype %d, revert back to static chunk\n",
             schedtype);
-      entityId = GetOmpThreadId(tid);
-      numberOfEntities = GetNumberOfOmpThreads(tid);
+      entityId = GetOmpThreadId(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
+      numberOfEntities = GetNumberOfOmpThreads(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
       ForStaticChunk(lastiter, lb, ub, stride, chunk, entityId, numberOfEntities);
     }
     }
@@ -193,7 +185,7 @@ public:
     *pstride = stride;
     PRINT(LD_LOOP,
           "Got sched: Active %d, total %d: lb %lld, ub %lld, stride %lld\n",
-          isNoOMPMode() ? GetNumberOfThreadsInBlock() : GetNumberOfOmpThreads(tid),
+          GetNumberOfOmpThreads(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable),
           GetNumberOfWorkersInTeam(), P64(*plower), P64(*pupper), P64(*pstride));
   }
 
@@ -214,8 +206,11 @@ public:
     omptarget_nvptx_TaskDescr *currTaskDescr = getMyTopTaskDescriptor(tid);
     T tnum = currTaskDescr->ThreadsInTeam();
     T tripCount = ub - lb + 1; // +1 because ub is inclusive
-    ASSERT0(LT_FUSSY, GetOmpThreadId(tid) < GetNumberOfOmpThreads(tid),
-            "current thread is not needed here; error");
+    ASSERT0(
+        LT_FUSSY,
+        GetOmpThreadId(tid, isSPMDMode(), isRuntimeUninitialized()) <
+            GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized()),
+        "current thread is not needed here; error");
 
     // Process schedule.
     if (tnum == 1 || tripCount <= 1 || OrderedSchedule(schedule)) {
@@ -273,7 +268,7 @@ public:
       omptarget_nvptx_threadPrivateContext->LoopUpperBound(tid) = ub;
       // compute static chunk
       ST stride;
-      T threadId = GetOmpThreadId(tid);
+      T threadId = GetOmpThreadId(tid, isSPMDMode(), isRuntimeUninitialized());
       int lastiter = 0;
       ForStaticChunk(lastiter, lb, ub, stride, chunk, threadId, tnum);
       // save computed params
@@ -283,7 +278,7 @@ public:
       PRINT(LD_LOOP,
             "dispatch init (static chunk) : num threads = %d, ub = %lld,"
             "next lower bound = %lld, stride = %lld\n",
-            GetNumberOfOmpThreads(tid),
+            GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized()),
             omptarget_nvptx_threadPrivateContext->LoopUpperBound(tid),
             omptarget_nvptx_threadPrivateContext->NextLowerBound(tid),
             omptarget_nvptx_threadPrivateContext->Stride(tid));
@@ -294,7 +289,7 @@ public:
       omptarget_nvptx_threadPrivateContext->LoopUpperBound(tid) = ub;
       // compute static chunk
       ST stride;
-      T threadId = GetOmpThreadId(tid);
+      T threadId = GetOmpThreadId(tid, isSPMDMode(), isRuntimeUninitialized());
       int lastiter = 0;
       ForStaticNoChunk(lastiter, lb, ub, stride, chunk, threadId, tnum);
       // save computed params
@@ -304,7 +299,7 @@ public:
       PRINT(LD_LOOP,
             "dispatch init (static nochunk) : num threads = %d, ub = %lld,"
             "next lower bound = %lld, stride = %lld\n",
-            GetNumberOfOmpThreads(tid),
+            GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized()),
             omptarget_nvptx_threadPrivateContext->LoopUpperBound(tid),
             omptarget_nvptx_threadPrivateContext->NextLowerBound(tid),
             omptarget_nvptx_threadPrivateContext->Stride(tid));
@@ -320,7 +315,7 @@ public:
       PRINT(LD_LOOP,
             "dispatch init (dyn) : num threads = %d, ub = %lld, chunk %lld, "
             "events number = %lld\n",
-            GetNumberOfOmpThreads(tid),
+            GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized()),
             omptarget_nvptx_threadPrivateContext->LoopUpperBound(tid),
             omptarget_nvptx_threadPrivateContext->Chunk(tid),
             omptarget_nvptx_threadPrivateContext->EventsNumber(tid));
@@ -375,7 +370,9 @@ public:
 
     // automatically selects thread or warp ID based on selected implementation
     int tid = GetLogicalThreadIdInBlock();
-    ASSERT0(LT_FUSSY, GetOmpThreadId(tid) < GetNumberOfOmpThreads(tid),
+    ASSERT0(LT_FUSSY,
+            GetOmpThreadId(tid, isSPMDMode(), isRuntimeUninitialized()) <
+                GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized()),
             "current thread is not needed here; error");
     // retrieve schedule
     kmp_sched_t schedule =
@@ -440,7 +437,7 @@ public:
 
     PRINT(LD_LOOP,
           "Got sched: active %d, total %d: lb %lld, ub %lld, stride = %lld\n",
-          GetNumberOfOmpThreads(tid), GetNumberOfWorkersInTeam(),
+          GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized()), GetNumberOfWorkersInTeam(),
           P64(*plower), P64(*pupper), P64(*pstride));
     return DISPATCH_NOTFINISHED;
   }
@@ -556,7 +553,7 @@ EXTERN void __kmpc_for_static_init_4(kmp_Indent *loc, int32_t global_tid,
                                      int32_t chunk) {
   PRINT0(LD_IO, "call kmpc_for_static_init_4\n");
   omptarget_nvptx_LoopSupport<int32_t, int32_t>::for_static_init(
-      schedtype, plastiter, plower, pupper, pstride, chunk);
+      schedtype, plastiter, plower, pupper, pstride, chunk, isSPMDMode());
 }
 
 EXTERN void __kmpc_for_static_init_4u(kmp_Indent *loc, int32_t global_tid,
@@ -566,7 +563,7 @@ EXTERN void __kmpc_for_static_init_4u(kmp_Indent *loc, int32_t global_tid,
                                       int32_t chunk) {
   PRINT0(LD_IO, "call kmpc_for_static_init_4u\n");
   omptarget_nvptx_LoopSupport<uint32_t, int32_t>::for_static_init(
-      schedtype, plastiter, plower, pupper, pstride, chunk);
+      schedtype, plastiter, plower, pupper, pstride, chunk, isSPMDMode());
 }
 
 EXTERN void __kmpc_for_static_init_8(kmp_Indent *loc, int32_t global_tid,
@@ -576,7 +573,7 @@ EXTERN void __kmpc_for_static_init_8(kmp_Indent *loc, int32_t global_tid,
                                      int64_t chunk) {
   PRINT0(LD_IO, "call kmpc_for_static_init_8\n");
   omptarget_nvptx_LoopSupport<int64_t, int64_t>::for_static_init(
-      schedtype, plastiter, plower, pupper, pstride, chunk);
+      schedtype, plastiter, plower, pupper, pstride, chunk, isSPMDMode());
 }
 
 EXTERN void __kmpc_for_static_init_8u(kmp_Indent *loc, int32_t global_tid,
@@ -586,7 +583,107 @@ EXTERN void __kmpc_for_static_init_8u(kmp_Indent *loc, int32_t global_tid,
                                       int64_t chunk) {
   PRINT0(LD_IO, "call kmpc_for_static_init_8u\n");
   omptarget_nvptx_LoopSupport<uint64_t, int64_t>::for_static_init(
-      schedtype, plastiter, plower, pupper, pstride, chunk);
+      schedtype, plastiter, plower, pupper, pstride, chunk, isSPMDMode());
+}
+
+EXTERN
+void __kmpc_for_static_init_4_simple_spmd(kmp_Indent *loc, int32_t global_tid,
+                                          int32_t schedtype, int32_t *plastiter,
+                                          int32_t *plower, int32_t *pupper,
+                                          int32_t *pstride, int32_t incr,
+                                          int32_t chunk) {
+  PRINT0(LD_IO, "call kmpc_for_static_init_4_simple_spmd\n");
+  omptarget_nvptx_LoopSupport<int32_t, int32_t>::for_static_init(
+      schedtype, plastiter, plower, pupper, pstride, chunk,
+      /*isSPMDExecutionMode=*/true,
+      /*IsOMPRuntimeUnavailable=*/true);
+}
+
+EXTERN
+void __kmpc_for_static_init_4u_simple_spmd(kmp_Indent *loc, int32_t global_tid,
+                                           int32_t schedtype,
+                                           int32_t *plastiter, uint32_t *plower,
+                                           uint32_t *pupper, int32_t *pstride,
+                                           int32_t incr, int32_t chunk) {
+  PRINT0(LD_IO, "call kmpc_for_static_init_4u_simple_spmd\n");
+  omptarget_nvptx_LoopSupport<uint32_t, int32_t>::for_static_init(
+      schedtype, plastiter, plower, pupper, pstride, chunk,
+      /*isSPMDExecutionMode=*/true,
+      /*IsOMPRuntimeUnavailable=*/true);
+}
+
+EXTERN
+void __kmpc_for_static_init_8_simple_spmd(kmp_Indent *loc, int32_t global_tid,
+                                          int32_t schedtype, int32_t *plastiter,
+                                          int64_t *plower, int64_t *pupper,
+                                          int64_t *pstride, int64_t incr,
+                                          int64_t chunk) {
+  PRINT0(LD_IO, "call kmpc_for_static_init_8_simple_spmd\n");
+  omptarget_nvptx_LoopSupport<int64_t, int64_t>::for_static_init(
+      schedtype, plastiter, plower, pupper, pstride, chunk,
+      /*isSPMDExecutionMode=*/true,
+      /*IsOMPRuntimeUnavailable=*/true);
+}
+
+EXTERN
+void __kmpc_for_static_init_8u_simple_spmd(kmp_Indent *loc, int32_t global_tid,
+                                           int32_t schedtype,
+                                           int32_t *plastiter, uint64_t *plower,
+                                           uint64_t *pupper, int64_t *pstride,
+                                           int64_t incr, int64_t chunk) {
+  PRINT0(LD_IO, "call kmpc_for_static_init_8u_simple_spmd\n");
+  omptarget_nvptx_LoopSupport<uint64_t, int64_t>::for_static_init(
+      schedtype, plastiter, plower, pupper, pstride, chunk,
+      /*isSPMDExecutionMode=*/true,
+      /*IsOMPRuntimeUnavailable=*/true);
+}
+
+EXTERN
+void __kmpc_for_static_init_4_simple_generic(
+    kmp_Indent *loc, int32_t global_tid, int32_t schedtype, int32_t *plastiter,
+    int32_t *plower, int32_t *pupper, int32_t *pstride, int32_t incr,
+    int32_t chunk) {
+  PRINT0(LD_IO, "call kmpc_for_static_init_4_simple_generic\n");
+  omptarget_nvptx_LoopSupport<int32_t, int32_t>::for_static_init(
+      schedtype, plastiter, plower, pupper, pstride, chunk,
+      /*isSPMDExecutionMode=*/false,
+      /*IsOMPRuntimeUnavailable=*/true);
+}
+
+EXTERN
+void __kmpc_for_static_init_4u_simple_generic(
+    kmp_Indent *loc, int32_t global_tid, int32_t schedtype, int32_t *plastiter,
+    uint32_t *plower, uint32_t *pupper, int32_t *pstride, int32_t incr,
+    int32_t chunk) {
+  PRINT0(LD_IO, "call kmpc_for_static_init_4u_simple_generic\n");
+  omptarget_nvptx_LoopSupport<uint32_t, int32_t>::for_static_init(
+      schedtype, plastiter, plower, pupper, pstride, chunk,
+      /*isSPMDExecutionMode=*/false,
+      /*IsOMPRuntimeUnavailable=*/true);
+}
+
+EXTERN
+void __kmpc_for_static_init_8_simple_generic(
+    kmp_Indent *loc, int32_t global_tid, int32_t schedtype, int32_t *plastiter,
+    int64_t *plower, int64_t *pupper, int64_t *pstride, int64_t incr,
+    int64_t chunk) {
+  PRINT0(LD_IO, "call kmpc_for_static_init_8_simple_generic\n");
+  omptarget_nvptx_LoopSupport<int64_t, int64_t>::for_static_init(
+      schedtype, plastiter, plower, pupper, pstride, chunk,
+      /*isSPMDExecutionMode=*/false,
+      /*IsOMPRuntimeUnavailable=*/true);
+}
+
+EXTERN
+void __kmpc_for_static_init_8u_simple_generic(
+    kmp_Indent *loc, int32_t global_tid, int32_t schedtype, int32_t *plastiter,
+    uint64_t *plower, uint64_t *pupper, int64_t *pstride, int64_t incr,
+    int64_t chunk) {
+  PRINT0(LD_IO, "call kmpc_for_static_init_8u_simple_generic\n");
+  omptarget_nvptx_LoopSupport<uint64_t, int64_t>::for_static_init(
+      schedtype, plastiter, plower, pupper, pstride, chunk,
+      /*isSPMDExecutionMode=*/false,
+      /*IsOMPRuntimeUnavailable=*/true);
 }
 
 EXTERN void __kmpc_for_static_fini(kmp_Indent *loc, int32_t global_tid) {
