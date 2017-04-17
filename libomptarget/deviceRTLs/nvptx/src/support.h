@@ -12,14 +12,25 @@
 //===----------------------------------------------------------------------===//
 
 ////////////////////////////////////////////////////////////////////////////////
-// Mode of Operation
+// Execution Parameters
 ////////////////////////////////////////////////////////////////////////////////
-INLINE void setGenericMode();
+enum ExecutionMode {
+  Generic = 0x00u,
+  Spmd = 0x01u,
+  ModeMask = 0x01u,
+};
+
+enum RuntimeMode {
+  RuntimeInitialized = 0x00u,
+  RuntimeUninitialized = 0x02u,
+  RuntimeMask = 0x02u,
+};
+
+INLINE void setExecutionParameters(ExecutionMode EMode, RuntimeMode RMode);
 INLINE bool isGenericMode();
-INLINE void setSPMDMode();
 INLINE bool isSPMDMode();
-INLINE void setNoOMPMode();
-INLINE bool isNoOMPMode();
+INLINE bool isRuntimeUninitialized();
+INLINE bool isRuntimeInitialized();
 
 ////////////////////////////////////////////////////////////////////////////////
 // get info from machine

@@ -12,40 +12,28 @@
 //===----------------------------------------------------------------------===//
 
 ////////////////////////////////////////////////////////////////////////////////
-// Mode of Operation
+// Execution Parameters
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-enum EXECUTION_MODE {
-  GENERIC = 0,
-  SPMD = 1,
-  NO_OMP = 2,
-};
-};
-
-INLINE void setGenericMode() {
-  execution_mode = GENERIC;
+INLINE void setExecutionParameters(ExecutionMode EMode, RuntimeMode RMode) {
+  execution_param = EMode;
+  execution_param |= RMode;
 }
 
 INLINE bool isGenericMode() {
-  return execution_mode == GENERIC;
-}
-
-INLINE void setSPMDMode() {
-  execution_mode = SPMD;
+  return (execution_param & ModeMask) == Generic;
 }
 
 INLINE bool isSPMDMode() {
-  return execution_mode == SPMD;
+  return (execution_param & ModeMask) == Spmd;
 }
 
-INLINE void setNoOMPMode() {
-  // Minimal OMP mode.  Will not have OMP state.
-  execution_mode = NO_OMP;
+INLINE bool isRuntimeUninitialized() {
+  return (execution_param & RuntimeMask) == RuntimeUninitialized;
 }
 
-INLINE bool isNoOMPMode() {
-  return execution_mode == NO_OMP;
+INLINE bool isRuntimeInitialized() {
+  return (execution_param & RuntimeMask) == RuntimeInitialized;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -31,7 +31,7 @@ extern __device__ __shared__ omptarget_nvptx_ThreadPrivateContext
 // there is one copy of these variables for each kernel, instance, and team.
 //
 extern volatile __device__ __shared__ omptarget_nvptx_WorkFn   omptarget_nvptx_workFn;
-extern __device__ __shared__ int8_t execution_mode;
+extern __device__ __shared__ uint32_t execution_param;
 
 ////////////////////////////////////////////////////////////////////////////////
 // init entry points
