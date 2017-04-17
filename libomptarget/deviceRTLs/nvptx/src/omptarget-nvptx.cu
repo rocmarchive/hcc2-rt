@@ -49,9 +49,18 @@ INLINE unsigned n_sm() {
   return n_sm;
 }
 
-EXTERN void __kmpc_kernel_init(int ThreadLimit) {
+EXTERN void __kmpc_kernel_init(int ThreadLimit,
+                               int16_t RequiresOMPRuntime) {
   PRINT(LD_IO, "call to __kmpc_kernel_init with version %f\n",
         OMPTARGET_NVPTX_VERSION);
+
+  if (!RequiresOMPRuntime) {
+    // If OMP runtime is not required don't initialize OMP state.
+    setExecutionParameters(Generic, RuntimeUninitialized);
+    return;
+  }
+  setExecutionParameters(Generic, RuntimeInitialized);
+
   int threadIdInBlock = GetThreadIdInBlock();
   ASSERT0(LT_FUSSY, threadIdInBlock == GetMasterThreadID(),
           "__kmpc_kernel_init() must be called by team master warp only!");
@@ -60,7 +69,6 @@ EXTERN void __kmpc_kernel_init(int ThreadLimit) {
   // Get a state object from the queue.
   int slot = smid() % MAX_SM;
   omptarget_nvptx_threadPrivateContext = omptarget_nvptx_device_State[slot].Dequeue();
-  setGenericMode();
 
   // init thread private
   int threadId = GetLogicalThreadIdInBlock();
@@ -84,25 +92,27 @@ EXTERN void __kmpc_kernel_init(int ThreadLimit) {
   currTaskDescr->ThreadLimit() = ThreadLimit;
 }
 
-EXTERN void __kmpc_kernel_deinit() {
-  // Enqueue omp state object for use by another team.
-  int slot = smid() % MAX_SM;
-  omptarget_nvptx_device_State[slot].Enqueue(omptarget_nvptx_threadPrivateContext);
+EXTERN void __kmpc_kernel_deinit(int16_t IsOMPRuntimeInitialized) {
+  if (IsOMPRuntimeInitialized) {
+    // Enqueue omp state object for use by another team.
+    int slot = smid() % MAX_SM;
+    omptarget_nvptx_device_State[slot].Enqueue(omptarget_nvptx_threadPrivateContext);
+  }
   // Done with work.  Kill the workers.
   omptarget_nvptx_workFn = 0;
 }
 
 EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit,
-                                    short RequiresOMPRuntime,
-                                    short RequiresDataSharing) {
+                                    int16_t RequiresOMPRuntime,
+                                    int16_t RequiresDataSharing) {
   PRINT0(LD_IO, "call to __kmpc_spmd_kernel_init\n");
 
   if (!RequiresOMPRuntime) {
     // If OMP runtime is not required don't initialize OMP state.
-    setNoOMPMode();
+    setExecutionParameters(Spmd, RuntimeUninitialized);
     return;
   }
-  setSPMDMode();
+  setExecutionParameters(Spmd, RuntimeInitialized);
 
   //
   // Team Context Initialization.
