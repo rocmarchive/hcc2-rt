@@ -1218,7 +1218,8 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
     void **SavedSharedFrame,
     int32_t *SavedActiveThreads,
     size_t SharingDataSize,
-    size_t SharingDefaultDataSize );
+    size_t SharingDefaultDataSize,
+    int16_t IsOMPRuntimeInitialized);
 EXTERN void __kmpc_data_sharing_environment_end(
     __kmpc_data_sharing_slot **SavedSharedSlot,
     void **SavedSharedStack,
@@ -1226,6 +1227,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
     int32_t *SavedActiveThreads,
     int32_t IsEntryPoint );
 
-EXTERN void* __kmpc_get_data_sharing_environment_frame(int32_t SourceThreadID);
+EXTERN void* __kmpc_get_data_sharing_environment_frame(int32_t SourceThreadID,
+                                                       int16_t IsOMPRuntimeInitialized);
 //EXTERN void __kmpc_samuel_print(int64_t Bla);
 #endif

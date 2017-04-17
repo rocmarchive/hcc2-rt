@@ -115,10 +115,15 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
     void **SavedSharedFrame,
     int32_t *SavedActiveThreads,
     size_t SharingDataSize,
-    size_t SharingDefaultDataSize
+    size_t SharingDefaultDataSize,
+    int16_t IsOMPRuntimeInitialized
     ){
 
   DSPRINT0(DSFLAG,"Entering __kmpc_data_sharing_environment_begin\n");
+
+  // If the runtime has been elided, used __shared__ memory for master-worker
+  // data sharing.
+  if (!IsOMPRuntimeInitialized) return (void *) &DataSharingState;
 
   DSPRINT(DSFLAG,"Data Size %016llx\n", SharingDataSize);
   DSPRINT(DSFLAG,"Default Data Size %016llx\n", SharingDefaultDataSize);
@@ -287,8 +292,14 @@ EXTERN void __kmpc_data_sharing_environment_end(
   return;
 }
 
-EXTERN void* __kmpc_get_data_sharing_environment_frame(int32_t SourceThreadID){
+EXTERN void* __kmpc_get_data_sharing_environment_frame(int32_t SourceThreadID,
+                                                       int16_t IsOMPRuntimeInitialized){
   DSPRINT0(DSFLAG,"Entering __kmpc_get_data_sharing_environment_frame\n");
+
+  // If the runtime has been elided, use __shared__ memory for master-worker
+  // data sharing.  We're reusing the statically allocated data structure
+  // that is used for standard data sharing.
+  if (!IsOMPRuntimeInitialized) return (void *) &DataSharingState;
 
   // Get the frame used by the requested thread.
 
