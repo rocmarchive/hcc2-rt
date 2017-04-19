@@ -57,7 +57,7 @@ int main ()
     int p = -3;
     int r = 0;
     int l = 10;
-#pragma omp target map(tofrom: a, r) map(to: b,c)
+#pragma omp target teams num_teams(1) thread_limit(1024) map(tofrom: a, r) map(to: b,c)
 #pragma omp parallel
 #pragma omp for simd private(q) firstprivate(p) lastprivate(r) linear(l:2)
     for (int i = 0 ; i < N ; i++) {
@@ -116,7 +116,7 @@ int main ()
       c[i] = 2*i;
     }
 
-#pragma omp target map(tofrom: a) map(to: b,c)
+#pragma omp target teams num_teams(1) thread_limit(1024) map(tofrom: a) map(to: b,c)
 #pragma omp parallel
 #pragma omp for simd schedule(monotonic: static)
     for (int i = 0 ; i < N ; i++)

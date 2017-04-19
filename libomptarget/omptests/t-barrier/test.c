@@ -147,7 +147,7 @@ int main(void) {
   //
   // Test: Single thread in target region.
   //
-  TEST({
+  TESTD("#pragma omp target", {
   ZERO(B);
   BODY_B()
   }, VERIFY(0, 1, C[i], 491535));

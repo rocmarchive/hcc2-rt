@@ -50,9 +50,9 @@ int  main()
     if (numFromEnv) {
       CHECK("test1, teams", teams1, numFromEnv);
     } else {
-      CHECK("test1, teams", teams1, N/1024);
+      CHECK("test1, teams", teams1, N/128);
     }
-    CHECK("test1, threads", threads1, 1024);
+    CHECK("test1, threads", threads1, 128);
   }
   printf("  completed\n");
 

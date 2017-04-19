@@ -55,7 +55,7 @@
   int fail = 0; \
   int trial; \
   for (int trial = 0; trial < TRIALS && fail == 0; trial++) { \
-    _Pragma("omp target") \
+    _Pragma("omp target teams num_teams(1) thread_limit(1024)") \
      {T} \
     V \
   } \

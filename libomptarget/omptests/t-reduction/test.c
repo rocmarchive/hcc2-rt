@@ -466,7 +466,7 @@ int main(void) {
   //
   // Test: reduction on distribute parallel for.
   //
-  TEST({
+  TESTD("omp target", {
     _Pragma("omp teams num_teams(6)")
     {
       double Rd1 = 0; double Rd2 = 0;
