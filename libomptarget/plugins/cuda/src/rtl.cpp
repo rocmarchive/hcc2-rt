@@ -99,7 +99,7 @@ public:
   static const int HardTeamLimit = 1<<16; // 64k
   static const int HardThreadLimit = 1024;
   static const int DefaultNumTeams = 128;
-  static const int DefaultNumThreads = 1024;
+  static const int DefaultNumThreads = 128;
 
   // Record entry point associated with device
   void addOffloadEntry(int32_t device_id, __tgt_offload_entry entry) {
@@ -583,6 +583,10 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     DP("Setting CUDA threads per block to requested %d\n", thread_limit);
   } else {
     cudaThreadsPerBlock = DeviceInfo.NumThreads[device_id];
+    if (KernelInfo->ExecutionMode == GENERIC) {
+      // Leave room for the master warp which will be added below.
+      cudaThreadsPerBlock -= DeviceInfo.WarpSize[device_id];
+    }
     DP("Setting CUDA threads per block to default %d\n",
         DeviceInfo.NumThreads[device_id]);
   }
@@ -612,8 +616,12 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   int cudaBlocksPerGrid;
   if (team_num <= 0) {
     if (loop_tripcount > 0 && DeviceInfo.EnvNumTeams < 0) {
-      // round up to the nearest integer
-      cudaBlocksPerGrid = ((loop_tripcount - 1) / cudaThreadsPerBlock) + 1;
+      if (KernelInfo->ExecutionMode == SPMD) {
+        // round up to the nearest integer
+        cudaBlocksPerGrid = ((loop_tripcount - 1) / cudaThreadsPerBlock) + 1;
+      } else {
+        cudaBlocksPerGrid = loop_tripcount;
+      }
       DP("Using %d teams due to loop trip count %" PRIu64 " and number of "
           "threads per block %d\n", cudaBlocksPerGrid, loop_tripcount,
           cudaThreadsPerBlock);
