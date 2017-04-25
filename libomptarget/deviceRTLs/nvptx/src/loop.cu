@@ -364,8 +364,11 @@ public:
     return FINISHED;
   }
 
-  INLINE static int dispatch_next(int32_t *plast, T *plower, T *pupper,
-                                  ST *pstride) {
+  // On Pascal, with inlining of the runtime into the user application,
+  // this code deadlocks.  This is probably because different threads
+  // in a warp cannot make independent progress.
+  NOINLINE static int dispatch_next(int32_t *plast, T *plower, T *pupper,
+                                    ST *pstride) {
     // ID of a thread in its own warp
 
     // automatically selects thread or warp ID based on selected implementation
