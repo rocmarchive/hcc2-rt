@@ -267,8 +267,6 @@ int main(void) {
   // ****************************
   // Series 3: with ds attributes
   // ****************************
-  // DS currently failing in the compiler with asserts (bug #T158)
-//#if 0
   //
   // Test: private
   //
@@ -281,7 +279,7 @@ int main(void) {
       q = 3;
       A[i] += p;
       B[i] += q;
-    } 
+    }
   }
   for(int i = 0 ; i < N ; i++) {
     if (A[i] != TRIALS*2) {
@@ -333,25 +331,23 @@ int main(void) {
   }
   if(fail) printf("Failed\n");
   else printf("Succeeded\n");
-//#endif
 
   //
   // Test: lastprivate
   //
-#if 0
-  int lastpriv = -1;
-#pragma omp target teams distribute lastprivate(lastpriv) num_teams(10)
-  for(int i = 0 ; i < omp_get_num_teams() ; i++)
-    lastpriv = omp_get_team_num();
-
-  if(lastpriv != 9) {
-    printf("lastpriv value is %d and should have been %d\n", lastpriv, 9);
+  // requires array because scalar would be treated as implicit firstprivate by target
+  int lastpriv[2] = {-1,-1};
+  #pragma omp target teams distribute lastprivate(lastpriv) num_teams(10)
+  for(int i = 0 ; i < omp_get_num_teams() ; i++) {
+    lastpriv[0] = omp_get_team_num();
+  }
+  if(lastpriv[0] != 9) {
+    printf("lastpriv value is %d and should have been %d\n", lastpriv[0], 9);
     fail = 1;
   }
 
   if(fail) printf("Failed\n");
   else printf("Succeeded\n");
-#endif
 
   // ***************************
   // Series 4: with parallel for
@@ -383,7 +379,6 @@ int main(void) {
 
   if(fail) printf("Failed\n");
   else printf("Succeeded\n");
-//#endif
 
   //
   // Test: blocking loop where upper bound is not a multiple of tl*nte
@@ -479,4 +474,3 @@ int main(void) {
 
   return 0;
 }
-
