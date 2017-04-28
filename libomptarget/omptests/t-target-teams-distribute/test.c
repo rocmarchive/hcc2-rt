@@ -268,7 +268,7 @@ int main(void) {
   // Series 3: with ds attributes
   // ****************************
   // DS currently failing in the compiler with asserts (bug #T158)
-#if 0
+//#if 0
   //
   // Test: private
   //
@@ -338,9 +338,8 @@ int main(void) {
   //
   // Test: lastprivate
   //
-
+#if 0
   int lastpriv = -1;
-  // map(tofrom:lastpriv)
 #pragma omp target teams distribute lastprivate(lastpriv) num_teams(10)
   for(int i = 0 ; i < omp_get_num_teams() ; i++)
     lastpriv = omp_get_team_num();
@@ -352,7 +351,7 @@ int main(void) {
 
   if(fail) printf("Failed\n");
   else printf("Succeeded\n");
-
+#endif
 
   // ***************************
   // Series 4: with parallel for
@@ -384,15 +383,15 @@ int main(void) {
 
   if(fail) printf("Failed\n");
   else printf("Succeeded\n");
-#endif
+//#endif
 
   //
   // Test: blocking loop where upper bound is not a multiple of tl*nte
   //
   ZERO(A); ZERO(B);
-  int nte = 32;
-  int tl = 64;
-  int blockSize = tl;
+  nte = 32;
+  tl = 64;
+  blockSize = tl;
 
   for (int t = 0 ; t < TRIALS ; t++) {
 #pragma omp target teams distribute num_teams(nte) thread_limit(tl)
