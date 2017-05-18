@@ -12,7 +12,7 @@
 ##===----------------------------------------------------------------------===##
 if(LIBOMPTARGET_DEP_LIBELF_FOUND)
   if(LIBOMPTARGET_DEP_CUDA_FOUND)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(ppc64le)|(aarch64)$" AND CMAKE_SYSTEM_NAME MATCHES "Linux")
     
       libomptarget_say("Building CUDA offloading plugin.")
     
@@ -40,7 +40,7 @@ if(LIBOMPTARGET_DEP_LIBELF_FOUND)
       # Report to the parent scope that we are building a plugin for CUDA.
       set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS} nvptx64-nvidia-cuda" PARENT_SCOPE)
     else()
-      libomptarget_say("Not building CUDA offloading plugin: only support CUDA in Linux x86_64 or ppc64le hosts.")
+      libomptarget_say("Not building CUDA offloading plugin: only support CUDA in Linux x86_64, ppc64le and aarch64 hosts.")
     endif()
   else()
     libomptarget_say("Not building CUDA offloading plugin: CUDA not found in system.")
