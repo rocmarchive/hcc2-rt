@@ -7,18 +7,18 @@
 #include "../utilities/utilities.h"
 
 // enable tests
-#define CHECK              1
-#define FULL               1
-#define FULL_ZERO          1  /* use zero ptrs */
+#define CHECK              1  /* 1: */
+#define FULL               1  /* 1: */
+#define FULL_ZERO          1  /* 1: use zero ptrs */
 #define FULL_ZERO_NULL     1  /* 0: use zero ptrs */
-#define FULL_ZERO_IMPLICIT 1  /* use zero ptrs, with some that should be null on device */
+#define FULL_ZERO_IMPLICIT 1  /* 1: use zero ptrs, with some that should be null on device */
 #define FULL_S             0  /* 0: need struct support */
-#define OFFSET             1
+#define OFFSET             1  /* 1: */
 #define OFFSET_S           0  /* 0: need struct support */
-#define FP                 1  /* first-private arrays */
+#define FP                 1  /* 1: first-private arrays */
 #define FP_RANGES          0  /* 0: first-private arrays with ranges, not supported yet */
 #define FPPTR              0  /* 0: first-private arrays referenced via pointers, not supported yet */
-#define DEVICEPTR          1  /* is_device_ptr/use_device_ptr */
+#define DEVICEPTR          1  /* 1: is_device_ptr/use_device_ptr */
 #define PTR_REF            0  /* 0: maps with references to pointers */
 
 #define N (992)

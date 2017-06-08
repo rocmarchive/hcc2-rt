@@ -30,6 +30,7 @@ int main(void){
     printf("Default device inside task after resetting: %d\n",
         omp_get_default_device());
   }
+  #pragma omp taskwait
   printf("Default device outside task: %d\n", omp_get_default_device());
 
   // default device can set to whatever, if target fails, it goes to the host
