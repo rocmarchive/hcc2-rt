@@ -45,6 +45,7 @@ int main ()
           b[id]++;
         #endif
       }
+      #pragma omp taskwait
     #endif
   }
   // reproduce
