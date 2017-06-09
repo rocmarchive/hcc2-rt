@@ -1079,10 +1079,6 @@ int32_t __kmpc_nvptx_parallel_reduce_nowait_simple_generic(
                                       /*isRuntimeUninitialized=*/true);
 }
 
-// FIXME
-__device__ int scratchpad[65536];
-__device__ static unsigned timestamp = 0;
-
 INLINE
 int32_t nvptx_teams_reduce_nowait(
     int32_t global_tid, int32_t num_vars, size_t reduce_size, void *reduce_data,
