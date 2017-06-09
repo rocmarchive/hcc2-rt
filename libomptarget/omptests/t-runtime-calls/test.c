@@ -328,16 +328,17 @@ int main(void) {
 #endif
 
   //
-  // Test: omp_set/get_default_device(), omp_get_num_devices()
+  // Test: omp_set/get_default_device()
   //
   ZERO(A);
   TEST({
     omp_set_default_device(0); // Not used on device.
-    A[0] = omp_get_default_device() + omp_get_num_devices();  // 0  always returns 0.
+
+    A[0] = omp_get_default_device();  // 0  always returns 0.
   _Pragma("omp parallel num_threads(19)")
     {
       if (omp_get_thread_num() == 18) {
-        A[0] += omp_get_default_device() + omp_get_num_devices();  // 0  always returns 0.
+        A[0] += omp_get_default_device();  // 0  always returns 0.
       }
     }
   }, VERIFY(0, 1, A[i], 0));
