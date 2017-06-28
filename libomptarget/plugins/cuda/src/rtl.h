@@ -1,4 +1,4 @@
-//===----RTLs/hsa/src/rtl.h   - Target RTLs Implementation ------- C++ -*-===//
+//===----RTLs/cuda/src/rtl.h   - Target RTLs Implementation ------- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,11 +7,11 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// RTL for HSA machine
+// RTL for CUDA machine
 //
 //===----------------------------------------------------------------------===//
 
-// To be shared with device, i.e. amdgcn deviceRTL
+// To be shared with device, i.e. nvptx deviceRTL
 
 struct omptarget_device_environmentTy {
   int32_t num_devices;

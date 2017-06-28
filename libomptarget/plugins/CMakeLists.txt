@@ -36,8 +36,11 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "${tmachine}$")
         ${CMAKE_CURRENT_SOURCE_DIR}/../generic-elf-64bit/src/rtl.cpp)
         
       # Install plugin under the lib destination folder.
-      install(TARGETS "omptarget.rtl.${tmachine_libname}" 
-        LIBRARY DESTINATION lib${LIBOMPTARGET_LIBDIR_SUFFIX})
+      if(CMAKE_BUILD_TYPE MATCHES Debug)
+         install(TARGETS "omptarget.rtl.${tmachine_libname}" LIBRARY DESTINATION "lib-debug")
+      else()
+         install(TARGETS "omptarget.rtl.${tmachine_libname}" LIBRARY DESTINATION "lib")
+      endif()
         
       target_link_libraries(
         "omptarget.rtl.${tmachine_libname}"
@@ -61,12 +64,12 @@ else()
 endif()
 endmacro()
 
-add_subdirectory(aarch64)
 add_subdirectory(cuda)
+add_subdirectory(hsa)
+add_subdirectory(aarch64)
 add_subdirectory(ppc64)
 add_subdirectory(ppc64le)
 add_subdirectory(x86_64)
-add_subdirectory(hsa)
 
 # Make sure the parent scope can see the plugins that will be created.
 set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS}" PARENT_SCOPE)

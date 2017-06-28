@@ -571,7 +571,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
        }
 
        if (varsize != e->size) {
-         DP("Loading global '%s' - size mismatch (%zd != %zd)\n", e->name,
+         DP("Loading global '%s' - size mismatch (%u != %lu)\n", e->name,
              varsize, e->size);
          return NULL;
        }
@@ -606,7 +606,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
                                                         &ExecModePtr, &varsize);
      if (err == ATMI_STATUS_SUCCESS) {
        if ((size_t)varsize != sizeof(int8_t)) {
-         DP("Loading global exec_mode '%s' - size mismatch (%zd != %zd)\n",
+         DP("Loading global exec_mode '%s' - size mismatch (%u != %lu)\n",
             ExecModeName, varsize, sizeof(int8_t));
          return NULL;
        }
@@ -614,7 +614,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
        err = atmi_memcpy(&ExecModeVal, ExecModePtr, (size_t) varsize);
        if (err != ATMI_STATUS_SUCCESS) {
          DP("Error when copying data from device to host. Pointers: "
-            "host = " DPxMOD ", device = " DPxMOD ", size = %zd\n",
+            "host = " DPxMOD ", device = " DPxMOD ", size = %u\n",
             DPxPTR(&ExecModeVal), DPxPTR(ExecModePtr), varsize);
          return NULL;
        }
@@ -637,49 +637,49 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
      DeviceInfo.addOffloadEntry(device_id, entry);
      DP("Entry point %ld maps to %s\n", e - HostBegin, e->name);
    }
-   {// load device environment here
-    omptarget_device_environmentTy device_env;
 
-    device_env.device_size = DeviceInfo.NumberOfDevices;
-    device_env.device_num = device_id;
+   {// send device environment here
+     omptarget_device_environmentTy device_env;
+
+     device_env.num_devices = DeviceInfo.NumberOfDevices;
+     device_env.device_num = device_id;
 
 #ifdef OMPTARGET_DEBUG
-    if (getenv("DEVICE_DEBUG"))
-      device_env.debug_mode = 1;
-    else
-      device_env.debug_mode = 0;
+     if (getenv("DEVICE_DEBUG"))
+       device_env.debug_mode = 1;
+     else
+       device_env.debug_mode = 0;
 #endif
 
-/*
-    const char * device_env_Name="omptarget_device_environment";
-    void *device_env_Ptr;
-    uint32_t varsize;
+     const char * device_env_Name="omptarget_device_environment";
+     void *device_env_Ptr;
+     uint32_t varsize;
 
-    atmi_mem_place_t place = ATMI_MEM_PLACE_GPU_MEM(0, device_id, 0);
-    err = atmi_interop_hsa_get_symbol_info(place, device_env_Name,
-                 &device_env_Ptr, &varsize);
+     atmi_mem_place_t place = ATMI_MEM_PLACE_GPU_MEM(0, device_id, 0);
+     err = atmi_interop_hsa_get_symbol_info(place, device_env_Name,
+         &device_env_Ptr, &varsize);
 
-    if (err == ATMI_STATUS_SUCCESS) {
-      if ((size_t)varsize != sizeof(device_env)) {
-        DP("Loading global device_size '%s' - size mismatch (%zd != %zd)\n",
-            device_env_Name, varsize, sizeof(int32_t));
-        return NULL;
-      }
+     if (err == ATMI_STATUS_SUCCESS) {
+       if ((size_t)varsize != sizeof(device_env)) {
+         DP("Global device_environment '%s' - size mismatch (%u != %lu)\n",
+             device_env_Name, varsize, sizeof(int32_t));
+         return NULL;
+       }
 
-      err = atmi_memcpy(device_env_Ptr, &device_env, varsize);
-      if (err != ATMI_STATUS_SUCCESS) {
-        DP("Error when copying data from host to device. Pointers: "
-            "host = " DPxMOD ", device = " DPxMOD ", size = %zd\n",
-            DPxPTR(&device_env), DPxPTR(device_env_Ptr), varsize);
-        return NULL;
-      }
+       err = atmi_memcpy(device_env_Ptr, &device_env, varsize);
+       if (err != ATMI_STATUS_SUCCESS) {
+         DP("Error when copying data from host to device. Pointers: "
+             "host = " DPxMOD ", device = " DPxMOD ", size = %u\n",
+             DPxPTR(&device_env), DPxPTR(device_env_Ptr), varsize);
+         return NULL;
+       }
 
-      DP("Loading device environment %lu bytes\n", (size_t)varsize);
-    } else {
-      DP("Loading global device_size '%s' - symbol missing.\n", device_env_Name);
-      return NULL;
-    }
-*/
+       DP("Sending global device environment %lu bytes\n", (size_t)varsize);
+     } else {
+       DP("Finding global device environment '%s' - symbol missing.\n", device_env_Name);
+       // no need to return NULL, consider this is a not a device debug build.
+       //return NULL;
+     }
    }
 
    return DeviceInfo.getOffloadEntriesTable(device_id);
