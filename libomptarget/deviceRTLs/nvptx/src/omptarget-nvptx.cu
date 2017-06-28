@@ -12,26 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "omptarget-nvptx.h"
-#include "state-queue.h"
-
-////////////////////////////////////////////////////////////////////////////////
-// global data tables
-////////////////////////////////////////////////////////////////////////////////
-
-extern __device__
-omptarget_nvptx_Queue<omptarget_nvptx_ThreadPrivateContext, OMP_STATE_COUNT>
-    omptarget_nvptx_device_State[MAX_SM];
-
-extern __device__ __shared__ omptarget_nvptx_ThreadPrivateContext
-    *omptarget_nvptx_threadPrivateContext;
-
-//
-// The team master sets the outlined function and its arguments in these
-// variables to communicate with the workers.  Since they are in shared memory,
-// there is one copy of these variables for each kernel, instance, and team.
-//
-extern volatile __device__ __shared__ omptarget_nvptx_WorkFn   omptarget_nvptx_workFn;
-extern __device__ __shared__ uint32_t execution_param;
 
 ////////////////////////////////////////////////////////////////////////////////
 // init entry points
@@ -51,10 +31,11 @@ INLINE unsigned n_sm() {
 
 EXTERN void __kmpc_kernel_init(int ThreadLimit,
                                int16_t RequiresOMPRuntime) {
-  PRINT(LD_IO, "call to __kmpc_kernel_init with version %f\n",
-        OMPTARGET_NVPTX_VERSION);
+  PRINT(LD_IO, "call to __kmpc_kernel_init with version %f, threadlimit %d\n",
+      OMPTARGET_NVPTX_VERSION, ThreadLimit);
 
   if (!RequiresOMPRuntime) {
+    PRINT0(LD_IO, "OMP runtime not required\n");
     // If OMP runtime is not required don't initialize OMP state.
     setExecutionParameters(Generic, RuntimeUninitialized);
     return;
@@ -93,6 +74,9 @@ EXTERN void __kmpc_kernel_init(int ThreadLimit,
 }
 
 EXTERN void __kmpc_kernel_deinit(int16_t IsOMPRuntimeInitialized) {
+  PRINT(LD_IO, "call to __kmpc_kernel_deinit, IsOMPRuntimeInitialized %d\n",
+      IsOMPRuntimeInitialized);
+
   if (IsOMPRuntimeInitialized) {
     // Enqueue omp state object for use by another team.
     int slot = smid() % MAX_SM;
@@ -105,9 +89,11 @@ EXTERN void __kmpc_kernel_deinit(int16_t IsOMPRuntimeInitialized) {
 EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit,
                                     int16_t RequiresOMPRuntime,
                                     int16_t RequiresDataSharing) {
-  PRINT0(LD_IO, "call to __kmpc_spmd_kernel_init\n");
+  PRINT(LD_IO, "call to __kmpc_spmd_kernel_init with version %f, threadlimit %d\n",
+      OMPTARGET_NVPTX_VERSION, ThreadLimit);
 
   if (!RequiresOMPRuntime) {
+    PRINT0(LD_IO, "OMP runtime not required\n");
     // If OMP runtime is not required don't initialize OMP state.
     setExecutionParameters(Spmd, RuntimeUninitialized);
     return;
@@ -166,6 +152,8 @@ EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit,
 }
 
 EXTERN void __kmpc_spmd_kernel_deinit() {
+  PRINT0(LD_IO, "call to __kmpc_spmd_kernel_deinit\n");
+
   // We're not going to pop the task descr stack of each thread since
   // there are no more parallel regions in SPMD mode.
   __syncthreads();
