@@ -252,9 +252,13 @@ int32_t __tgt_rtl_init_device(int32_t device_id) {
     return OFFLOAD_FAIL;
   }
 
-  // Create the context and save it to use whenever this device is selected.
-  err = cuCtxCreate(&DeviceInfo.Contexts[device_id], CU_CTX_SCHED_BLOCKING_SYNC,
+  err = cuCtxGetCurrent(&DeviceInfo.Contexts[device_id]);  
+  if(DeviceInfo.Contexts[device_id] == NULL){
+    // Create the context and save it to use whenever this device is selected.
+    err = cuCtxCreate(&DeviceInfo.Contexts[device_id], CU_CTX_SCHED_BLOCKING_SYNC,
                     cuDevice);
+  }
+
   if (err != CUDA_SUCCESS) {
     DP("Error when creating a CUDA context\n");
     CUDA_ERR_STRING(err);
