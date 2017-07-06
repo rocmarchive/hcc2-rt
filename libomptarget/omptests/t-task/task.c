@@ -59,7 +59,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#1 got %d errors\n", errors);
 
   // Test: task within parallel
 
@@ -81,7 +81,6 @@ int main ()
         {
           #if TASK_COMPUTE
             PRINT("hi alex from  %d\n", id);
-            int id = omp_get_thread_num();
             b[id]++;
           #endif
         }
@@ -102,7 +101,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#2 got %d errors\n", errors);
 
   // Test: multiple nested tasks in parallel region
 
@@ -122,19 +121,19 @@ int main ()
       #pragma omp task firstprivate(id) shared(b)
       {
         PRINT("hi alex from  %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
 
         #pragma omp task firstprivate(id) shared(b)
         {
           PRINT("hi alex from  %d\n", id);
-          int id = omp_get_thread_num();
+          #pragma omp atomic
           b[id]++;
 
           #pragma omp task firstprivate(id) shared(b)
           {
             PRINT("hi alex from  %d\n", id);
-            int id = omp_get_thread_num();
+            #pragma omp atomic
             b[id]++;
           }
         }
@@ -154,7 +153,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#3 got %d errors\n", errors);
 
   // Test: three successive tasks in a parallel region
 
@@ -174,19 +173,19 @@ int main ()
       #pragma omp task firstprivate(id) shared(b)
       {
         PRINT("hi alex from %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
       }
       #pragma omp task firstprivate(id) shared(b)
       {
         PRINT("hi alex from %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
       }
       #pragma omp task firstprivate(id) shared(b)
       {
         PRINT("hi alex from %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
       }
     }
@@ -203,7 +202,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#4 got %d errors\n", errors);
 
   // Test: change of context when entering/exiting tasks
 
@@ -283,7 +282,7 @@ int main ()
     if (e[i] != ee[i]) printf("%4i: got e %d, expected %d, error %d\n", i, e[i], ee[i], ++errors);
   }
 
-  printf("got %d errors\n", errors);
+  printf("#5 got %d errors\n", errors);
 
   // Test: change of context when using if clause
 
@@ -363,7 +362,7 @@ int main ()
     if (e[i] != ee[i]) printf("%4i: got e %d, expected %d, error %d\n", i, e[i], ee[i], ++errors);
   }
 
-  printf("got %d errors\n", errors);
+  printf("#6 got %d errors\n", errors);
 
   // Test: final
 
@@ -383,19 +382,19 @@ int main ()
       #pragma omp task firstprivate(id) shared(b) final(1)
       {
         PRINT("hi alex from  %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
 
         #pragma omp task firstprivate(id) shared(b) final(1)
         {
           PRINT("hi alex from  %d\n", id);
-          int id = omp_get_thread_num();
+          #pragma omp atomic
           b[id]++;
 
           #pragma omp task firstprivate(id) shared(b) final(1)
           {
             PRINT("hi alex from  %d\n", id);
-            int id = omp_get_thread_num();
+            #pragma omp atomic
             b[id]++;
           }
         }
@@ -415,7 +414,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#7 got %d errors\n", errors);
 
 #if 0
   // Test: untied
@@ -436,19 +435,19 @@ int main ()
       #pragma omp task firstprivate(id) shared(b) untied
       {
         PRINT("hi alex from  %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
 
         #pragma omp task firstprivate(id) shared(b) untied
         {
           PRINT("hi alex from  %d\n", id);
-          int id = omp_get_thread_num();
+          #pragma omp atomic
           b[id]++;
 
           #pragma omp task firstprivate(id) shared(b) untied
           {
             PRINT("hi alex from  %d\n", id);
-            int id = omp_get_thread_num();
+            #pragma omp atomic
             b[id]++;
           }
         }
@@ -468,7 +467,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#8 got %d errors\n", errors);
 #endif
 
   // Test: mergeaeble
@@ -489,19 +488,19 @@ int main ()
       #pragma omp task firstprivate(id) shared(b)
       {
         PRINT("hi alex from  %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
 
         #pragma omp task firstprivate(id) shared(b) mergeable
         {
           PRINT("hi alex from  %d\n", id);
-          int id = omp_get_thread_num();
+          #pragma omp atomic
           b[id]++;
 
           #pragma omp task firstprivate(id) shared(b) mergeable
           {
             PRINT("hi alex from  %d\n", id);
-            int id = omp_get_thread_num();
+            #pragma omp atomic
             b[id]++;
           }
         }
@@ -521,7 +520,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#9 got %d errors\n", errors);
 
   // Test: private
 
@@ -543,7 +542,6 @@ int main ()
         {
           #if TASK_COMPUTE
             PRINT("hi alex from  %d\n", id);
-            int id = omp_get_thread_num();
             b[id]++;
           #endif
         }
@@ -564,7 +562,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#10 got %d errors\n", errors);
 
   // Test: depend
 
@@ -582,22 +580,19 @@ int main ()
     {
       int id = omp_get_thread_num();
       a[id]++;
-      #pragma omp task firstprivate(id) shared(b) depend(out:x)
+      #pragma omp task firstprivate(id) shared(b) depend(out:a[id])
       {
         PRINT("hi alex from %d\n", id);
-        int id = omp_get_thread_num();
         b[id]++;
       }
-      #pragma omp task firstprivate(id) shared(b) depend(inout:x)
+      #pragma omp task firstprivate(id) shared(b) depend(inout:a[id])
       {
         PRINT("hi alex from %d\n", id);
-        int id = omp_get_thread_num();
         b[id]++;
       }
-      #pragma omp task firstprivate(id) shared(b) depend(in:x)
+      #pragma omp task firstprivate(id) shared(b) depend(in:a[id])
       {
         PRINT("hi alex from %d\n", id);
-        int id = omp_get_thread_num();
         b[id]++;
       }
     }
@@ -614,7 +609,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#11 got %d errors\n", errors);
 
   // Test: inverted priority
 
@@ -634,19 +629,19 @@ int main ()
       #pragma omp task firstprivate(id) shared(b) priority(0)
       {
         PRINT("hi alex from %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
       }
       #pragma omp task firstprivate(id) shared(b) priority(10)
       {
         PRINT("hi alex from %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
       }
       #pragma omp task firstprivate(id) shared(b) priority(20)
       {
         PRINT("hi alex from %d\n", id);
-        int id = omp_get_thread_num();
+        #pragma omp atomic
         b[id]++;
       }
     }
@@ -663,7 +658,7 @@ int main ()
     if (a[i] != aa[i]) printf("%4i: got a %d, expected %d, error %d\n", i, a[i], aa[i], ++errors);
     if (b[i] != bb[i]) printf("%4i: got b %d, expected %d, error %d\n", i, b[i], bb[i], ++errors);
   }
-  printf("got %d errors\n", errors);
+  printf("#12 got %d errors\n", errors);
 
 
   return 0;
