@@ -1392,7 +1392,7 @@ static int CheckDevice(int64_t device_id) {
   return OFFLOAD_SUCCESS;
 }
 
-static short member_of(int64_t type) {
+static int member_of(int64_t type) {
   return ((type & OMP_TGT_MAPTYPE_MEMBER_OF) >> 48) - 1;
 }
 
@@ -1416,7 +1416,8 @@ static int target_data_begin(DeviceTy &Device, int32_t arg_num,
     // is a combined entry.
     int64_t padding = 0;
     const int next_i = i+1;
-    if (i != arg_num && member_of(arg_types[next_i]) == i) {
+    if (member_of(arg_types[i]) < 0 && next_i < arg_num &&
+        member_of(arg_types[next_i]) == i) {
       padding = (int64_t)HstPtrBegin % alignment;
       if (padding) {
         DP("Using a padding of %" PRId64 " bytes for begin address " DPxMOD
@@ -1589,7 +1590,8 @@ static int target_data_end(DeviceTy &Device, int32_t arg_num, void **args_base,
     // is a combined entry.
     int64_t padding = 0;
     const int next_i = i+1;
-    if (i != arg_num && member_of(arg_types[next_i]) == i) {
+    if (member_of(arg_types[i]) < 0 && next_i < arg_num &&
+        member_of(arg_types[next_i]) == i) {
       padding = (int64_t)HstPtrBegin % alignment;
       if (padding) {
         DP("Using a padding of %" PRId64 " bytes for begin address " DPxMOD
