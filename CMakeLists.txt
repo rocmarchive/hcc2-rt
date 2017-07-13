@@ -11,3 +11,5 @@ if (NOT (WIN32 OR ${CMAKE_SYSTEM_NAME} MATCHES "Darwin"))
   add_subdirectory(libomptarget)
 endif()
 
+add_subdirectory(cugcn/libdevice)
+add_subdirectory(utils)
