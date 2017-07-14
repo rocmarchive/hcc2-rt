@@ -20,7 +20,7 @@ set(amdgcn_mcpus gfx803 gfx700 gfx801 gfx701 gfx800 gfx900 gfx901)
 find_package(LLVM 5.0.0 QUIET CONFIG
   PATHS
   $ENV{HCC2}
-  /opt/amd/llvm
+  /opt/rocm/hcc2
   )
 
 if (LLVM_DIR)

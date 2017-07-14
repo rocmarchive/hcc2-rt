@@ -45,22 +45,28 @@ macro(collect_sources name dir)
 endmacro()
 
 macro(add_llvm_bc_library name dir)
-  set(ll_files)
+  set(llbc_files)
 
   foreach(file ${ARGN})
     file(RELATIVE_PATH rfile ${dir} ${file})
     get_filename_component(rdir ${rfile} DIRECTORY)
     get_filename_component(fname ${rfile} NAME_WE)
     get_filename_component(fext ${rfile} EXT)
+    set(llbc_file ${fname}.bc)
+    add_custom_command(
+      OUTPUT ${llbc_file}
+      COMMAND ${HCC2_BINDIR}/llvm-as ${CMAKE_CURRENT_SOURCE_DIR}/src/${fname}.ll -o ${llbc_file}
+      DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/${fname}.ll" 
+    )
+    list(APPEND llbc_files ${llbc_file})
 
-    list(APPEND ll_files ${CMAKE_CURRENT_SOURCE_DIR}/src/${fname}.ll)
   endforeach()
 
   add_custom_command(
     OUTPUT linkout.llvm.${mcpu}.bc
-    COMMAND ${HCC2_BINDIR}/llvm-link ${ll_files} -o linkout.llvm.${mcpu}.bc
-    DEPENDS ${ll_files}
-    )
+    COMMAND ${HCC2_BINDIR}/llvm-link ${llbc_files} -o linkout.llvm.${mcpu}.bc
+    DEPENDS ${llbc_files}
+  )
 
   list(APPEND bc_files linkout.llvm.${mcpu}.bc)
 endmacro()
@@ -172,7 +178,7 @@ macro(add_bc_library name dir)
     OUTPUT linkout.${mcpu}.bc
     #FIXME: remove the warning suppress when the address space strategy are unified
     #COMMAND ${HCC2_BINDIR}/llvm-link ${bc_files} -o linkout.${mcpu}.bc
-    COMMAND ${HCC2_BINDIR}/llvm-link -suppress-warnings ${bc_files} -o linkout.${mcpu}.bc
+    COMMAND ${HCC2_BINDIR}/llvm-link ${bc_files} -o linkout.${mcpu}.bc
     DEPENDS ${bc_files}
     )
   add_custom_command(
