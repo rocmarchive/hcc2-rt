@@ -131,7 +131,7 @@ mark_as_advanced(
 find_package(LLVM 5.0.0 QUIET CONFIG
   PATHS
   $ENV{HCC2}
-  /opt/amd/llvm
+  /opt/rocm/hcc2
   NO_DEFAULT_PATH
   )
 
@@ -158,7 +158,7 @@ endif()
 find_package(Clang QUIET CONFIG
   PATHS
   $ENV{HCC2}
-  /opt/amd/llvm
+  /opt/rocm/hcc2
   NO_DEFAULT_PATH
   )
 
