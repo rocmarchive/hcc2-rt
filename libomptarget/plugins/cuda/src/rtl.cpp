@@ -66,8 +66,12 @@ struct KernelTy {
   // 1 - Generic mode (with master warp)
   int8_t ExecutionMode;
 
-  KernelTy(CUfunction _Func, int8_t _ExecutionMode)
-      : Func(_Func), ExecutionMode(_ExecutionMode) {}
+  // Temporary - to be removed
+  int8_t HasTeamsReduction;
+
+  KernelTy(CUfunction _Func, int8_t _ExecutionMode, int8_t _HasTeamsReduction)
+      : Func(_Func), ExecutionMode(_ExecutionMode),
+        HasTeamsReduction(_HasTeamsReduction) {}
 };
 
 /// List that contains all the kernels.
@@ -463,7 +467,50 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
       CUDA_ERR_STRING(err);
     }
 
-    KernelsList.push_back(KernelTy(fun, ExecModeVal));
+    /*
+     * Temporary fix for kernels with teams reduction
+     */
+    // default value 1 (in case symbol is missing from cubin file)
+    int8_t ReductionVal = 1;
+    std::string ReductionNameStr (e->name);
+    ReductionNameStr += "_reduction";
+    const char *ReductionName = ReductionNameStr.c_str();
+
+    CUdeviceptr ReductionPtr;
+    err = cuModuleGetGlobal(&ReductionPtr, &cusize, cumod, ReductionName);
+    if (err == CUDA_SUCCESS) {
+      if ((size_t)cusize != sizeof(int8_t)) {
+        DP("Loading global reduction '%s' - size mismatch (%zd != %zd)\n",
+           ReductionName, cusize, sizeof(int8_t));
+        CUDA_ERR_STRING(err);
+        return NULL;
+      }
+
+      err = cuMemcpyDtoH(&ReductionVal, ReductionPtr, cusize);
+      if (err != CUDA_SUCCESS) {
+        DP("Error when copying data from device to host. Pointers: "
+           "host = " DPxMOD ", device = " DPxMOD ", size = %zd\n",
+           DPxPTR(&ReductionVal), DPxPTR(ReductionPtr), cusize);
+        CUDA_ERR_STRING(err);
+        return NULL;
+      }
+
+      if (ReductionVal < 0 || ReductionVal > 1) {
+        DP("Error wrong reduction value specified in cubin file: %d\n",
+           ExecModeVal);
+        return NULL;
+      }
+    } else {
+      DP("Loading global reduction '%s' - symbol missing, using default value "
+          "GENERIC (1)\n", ReductionName);
+      CUDA_ERR_STRING(err);
+    }
+    /*
+     * End temporary fix for kernels with teams reduction
+     */
+
+    //KernelsList.push_back(KernelTy(fun, ExecModeVal));
+    KernelsList.push_back(KernelTy(fun, ExecModeVal, ReductionVal));
 
     __tgt_offload_entry entry = *e;
     entry.addr = (void *)&KernelsList.back();
@@ -654,6 +701,14 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   } else {
     cudaBlocksPerGrid = team_num;
     DP("Using requested number of teams %d\n", team_num);
+  }
+
+  /*
+   * Temporary fix for kernels with teams reduction
+   */
+  if (KernelInfo->HasTeamsReduction && cudaBlocksPerGrid > 4096) {
+    DP("Limiting the number of teams to 4096 because of teams reduction.\n");
+    cudaBlocksPerGrid = 4096;
   }
 
   // Run on the device.
