@@ -4,17 +4,15 @@
 ;; We need these optimized in LLVM-IR
 ;;
 source_filename = "libicuda2gcn.ll"
-target datalayout = "e-p:64:64-p1:64:64-p2:64:64-p3:32:32-p4:64:64-p5:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64"
+target datalayout = "e-p:64:64-p1:64:64-p2:64:64-p3:32:32-p4:32:32-p5:32:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-A5"
 target triple = "amdgcn--cuda"
-
-declare i8 addrspace(1)* @__printf_alloc(i32) local_unnamed_addr #0
 
 declare i32 @llvm.amdgcn.s.getreg(i32) #0
 
 declare i64 @llvm.amdgcn.s.memrealtime() #6
 
 ; Function Attrs: nounwind readnone
-declare i8 addrspace(4)* @llvm.amdgcn.dispatch.ptr() #0
+declare i8 addrspace(2)* @llvm.amdgcn.dispatch.ptr() #0
 
 ; Function Attrs: nounwind readnone
 declare i32 @llvm.amdgcn.workgroup.id.x() #0
@@ -62,10 +60,10 @@ define i32 @nvvm.read.ptx.sreg.ntid.x() #2 {
   %1 = trunc i64 %call to i32
   ret i32 %1
 ;  Test and revert to this code if possible.
-; %dispatch_ptr = call noalias nonnull dereferenceable(64) i8 addrspace(4)* @llvm.amdgcn.dispatch.ptr()
-; %dispatch_ptr_i32 = bitcast i8 addrspace(4)* %dispatch_ptr to i32 addrspace(4)*
-; %size_xy_ptr = getelementptr inbounds i32, i32 addrspace(4)* %dispatch_ptr_i32, i64 1
-; %size_xy = load i32, i32 addrspace(4)* %size_xy_ptr, align 4, !invariant.load !0
+; %dispatch_ptr = call noalias nonnull dereferenceable(64) i8 addrspace(2)* @llvm.amdgcn.dispatch.ptr()
+; %dispatch_ptr_i32 = bitcast i8 addrspace(2)* %dispatch_ptr to i32 addrspace(2)*
+; %size_xy_ptr = getelementptr inbounds i32, i32 addrspace(2)* %dispatch_ptr_i32, i64 1
+; %size_xy = load i32, i32 addrspace(2)* %size_xy_ptr, align 4, !invariant.load !0
 ; %1 = and i32 %size_xy, 65535
 ; ret i32 %1
 }
@@ -91,13 +89,13 @@ define i32 @nvvm.read.ptx.sreg.nctaid.x() #3 {
   %1 = trunc i64 %call to i32
   ret i32 %1
 ;  Test and revert to this code if possible.
-;  %1 = tail call i8 addrspace(4)* @llvm.amdgcn.dispatch.ptr() #0
-;  %2 = getelementptr inbounds i8, i8 addrspace(4)* %1, i64 12
-;  %3 = bitcast i8 addrspace(4)* %2 to i32 addrspace(4)*
-;  %4 = load i32, i32 addrspace(4)* %3, align 4, !tbaa !1
-;  %5 = getelementptr inbounds i8, i8 addrspace(4)* %1, i64 4
-;  %6 = bitcast i8 addrspace(4)* %5 to i16 addrspace(4)*
-;  %7 = load i16, i16 addrspace(4)* %6, align 4, !tbaa !10
+;  %1 = tail call i8 addrspace(2)* @llvm.amdgcn.dispatch.ptr() #0
+;  %2 = getelementptr inbounds i8, i8 addrspace(2)* %1, i64 12
+;  %3 = bitcast i8 addrspace(2)* %2 to i32 addrspace(2)*
+;  %4 = load i32, i32 addrspace(2)* %3, align 4, !tbaa !1
+;  %5 = getelementptr inbounds i8, i8 addrspace(2)* %1, i64 4
+;  %6 = bitcast i8 addrspace(2)* %5 to i16 addrspace(2)*
+;  %7 = load i16, i16 addrspace(2)* %6, align 4, !tbaa !10
 ;  %8 = zext i16 %7 to i32
 ;  %9 = udiv i32 %4, %8
 ;  %10 = mul i32 %9, %8
@@ -228,36 +226,37 @@ define void @nvvm.membar.sys() #3 {
 ; atomic
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 define float @nvvm.atomic.load.add.f32.p0f32(float* %address, float %val) {
-  %oldi.addr = alloca i32, align 4
+  %oldi.addr = alloca i32, align 4 , addrspace(5)
   %vali = bitcast float %val to i32
   %cast = bitcast float* %address to i32*
   %oldi = atomicrmw volatile add i32* %cast, i32 %vali monotonic, !mem.scope !12
-  store i32 %oldi, i32* %oldi.addr, align 4
-  %oldf.addr = bitcast i32* %oldi.addr to float*
-  %old = load float, float* %oldf.addr, align 4
+  store i32 %oldi, i32 addrspace(5)* %oldi.addr, align 4
+  %oldf.addr = bitcast i32 addrspace(5)* %oldi.addr to float addrspace(5)*
+  %old = load float, float addrspace(5)* %oldf.addr, align 4
   ret float %old
 }
 
 define float @nvvm.atomic.load.add.f32.p1f32(float addrspace(1)* %address, float %val) {
-  %oldi.addr = alloca i32, align 4
+  %oldi.addr = alloca i32, align 4 , addrspace(5)
   %vali = bitcast float %val to i32
   %cast = bitcast float addrspace(1)* %address to i32 addrspace(1)*
   %oldi = atomicrmw volatile add i32 addrspace(1)* %cast, i32 %vali monotonic, !mem.scope !12
-  store i32 %oldi, i32* %oldi.addr, align 4
-  %oldf.addr = bitcast i32* %oldi.addr to float*
-  %old = load float, float* %oldf.addr, align 4
+  store i32 %oldi, i32 addrspace(5)* %oldi.addr, align 4
+  %oldf.addr = bitcast i32 addrspace(5)* %oldi.addr to float addrspace(5)*
+  %old = load float, float addrspace(5)* %oldf.addr, align 4
   ret float %old
 }
 
 define float @nvvm.atomic.load.add.f32.p3f32(float addrspace(3)* %address, float %val) {
-  %oldi.addr = alloca i32, align 4
+  %oldi.addr = alloca i32, align 4, addrspace(5)
   %vali = bitcast float %val to i32
   %cast = bitcast float addrspace(3)* %address to i32 addrspace(3)*
   %oldi = atomicrmw volatile add i32 addrspace(3)* %cast, i32 %vali monotonic, !mem.scope !12
-  store i32 %oldi, i32* %oldi.addr, align 4
-  %oldf.addr = bitcast i32* %oldi.addr to float*
-  %old = load float, float* %oldf.addr, align 4
+  store i32 %oldi, i32 addrspace(5)* %oldi.addr, align 4
+  %oldf.addr = bitcast i32 addrspace(5)* %oldi.addr to float addrspace(5)*
+  %old = load float, float addrspace(5)* %oldf.addr, align 4
   ret float %old
 }
 
@@ -531,13 +530,6 @@ define float @nvvm.shfl.bfly.f32(float, i32, i32) local_unnamed_addr #5 {
   %15 = tail call i32 @llvm.amdgcn.ds.bpermute(i32 %14, i32 %4) #5
   %16 = bitcast i32 %15 to float
   ret float %16
-}
-
-; Function Attrs: alwaysinline nounwind
-define i8* @generic_printf_alloc(i32) local_unnamed_addr #3 {
-  %2 = tail call i8 addrspace(1)* @__printf_alloc(i32 %0) #0
-  %3 = addrspacecast i8 addrspace(1)* %2 to i8*
-  ret i8* %3
 }
 
 attributes #0 = { nounwind readnone }
