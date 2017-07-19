@@ -126,6 +126,8 @@
                                             const size_t *, const size_t *, const size_t *, const size_t *, int, int);
     extern int   __KAI_KMPC_CONVENTION  omp_target_associate_ptr(void *, void *, size_t, size_t, int);
     extern int   __KAI_KMPC_CONVENTION  omp_target_disassociate_ptr(void *, int);
+    /* OpenMP 5.0 */
+    extern int  __KAI_KMPC_CONVENTION   omp_get_device_num (void);
 
     /* kmp API functions */
     extern int    __KAI_KMPC_CONVENTION  kmp_get_stacksize          (void);
