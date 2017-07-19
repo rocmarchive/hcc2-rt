@@ -60,7 +60,7 @@ EXTERN void __kmpc_barrier(kmp_Indent *loc_ref, int32_t tid) {
 // Emit a simple barrier call in SPMD mode.  Assumes the caller is in an L0 parallel
 // region and that all worker threads participate.
 EXTERN void __kmpc_barrier_simple_spmd(kmp_Indent *loc_ref, int32_t tid) {
-  PRINT(LD_SYNC, "call kmpc_barrier_simple_spmd\n");
+  PRINT0(LD_SYNC, "call kmpc_barrier_simple_spmd\n");
   __syncthreads();
   PRINT0(LD_SYNC, "completed kmpc_barrier_simple_spmd\n");
 }

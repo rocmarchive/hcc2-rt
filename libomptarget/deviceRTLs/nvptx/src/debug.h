@@ -72,7 +72,10 @@
 #ifndef OMPTARGET_NVPTX_DEBUG
 #define OMPTARGET_NVPTX_DEBUG LD_SET_NONE
 #elif OMPTARGET_NVPTX_DEBUG
+// Only print this warning if BUILD_TYPE was not Debug
+#ifndef OMPTARGET_DEBUG
 #warning debug is used, not good for measurements
+#endif
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -163,7 +166,7 @@
 
 #define PRINT0(_flag, _str)                                                    \
   {                                                                            \
-    if (DON(_flag)) {                                                          \
+    if (omptarget_device_environment.debug_mode && DON(_flag)) {               \
       printf("<b %2d, t %4d, w %2d, l %2d>: " _str, blockIdx.x, threadIdx.x,   \
              threadIdx.x / warpSize, threadIdx.x & 0x1F);                      \
     }                                                                          \
@@ -171,7 +174,7 @@
 
 #define PRINT(_flag, _str, _args...)                                           \
   {                                                                            \
-    if (DON(_flag)) {                                                          \
+    if (omptarget_device_environment.debug_mode && DON(_flag)) {               \
       printf("<b %2d, t %4d, w %2d, l %2d>: " _str, blockIdx.x, threadIdx.x,   \
              threadIdx.x / warpSize, threadIdx.x & 0x1F, _args);               \
     }                                                                          \

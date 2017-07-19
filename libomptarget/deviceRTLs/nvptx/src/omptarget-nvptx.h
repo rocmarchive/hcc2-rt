@@ -26,6 +26,7 @@
 // local includes
 #include "option.h" // choices we have
 #include "counter_group.h"
+#include "state-queue.h"
 #include "debug.h" // debug
 #include "interface.h" // interfaces with omp, compiler, and user
 #include "support.h"
@@ -296,11 +297,25 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+// global device envrionment
+////////////////////////////////////////////////////////////////////////////////
+
+// Environment block shared with the host plugin
+#include "../../../plugins/cuda/src/rtl.h"
+
+extern __device__ omptarget_device_environmentTy omptarget_device_environment;
+
+////////////////////////////////////////////////////////////////////////////////
 // global data tables
 ////////////////////////////////////////////////////////////////////////////////
 
+extern __device__
+omptarget_nvptx_Queue<omptarget_nvptx_ThreadPrivateContext, OMP_STATE_COUNT>
+    omptarget_nvptx_device_State[MAX_SM];
+
 extern __device__ __shared__ omptarget_nvptx_ThreadPrivateContext
     *omptarget_nvptx_threadPrivateContext;
+
 extern __device__ __shared__ uint32_t execution_param;
 extern __device__ char scratchpad[262144];
 extern __device__ unsigned timestamp;
