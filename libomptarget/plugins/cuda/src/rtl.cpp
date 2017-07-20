@@ -44,6 +44,11 @@
   {}
 #endif
 
+// Set CUDA's printf buffer size to 2^x times than its default
+#ifndef TARGET_PRINTF_BUFFER_SIZE_FACTOR
+#define TARGET_PRINTF_BUFFER_SIZE_FACTOR 4
+#endif
+
 /// Keep entries table per device.
 struct FuncOrGblEntryTy {
   __tgt_target_table Table;
@@ -343,6 +348,15 @@ int32_t __tgt_rtl_init_device(int32_t device_id) {
     DP("Default number of threads exceeds device limit, capping at %d\n",
         DeviceInfo.ThreadsPerBlock[device_id]);
   }
+
+#ifdef OMPTARGET_DEBUG
+  size_t printf_buffer_sz;
+  cudaDeviceGetLimit(&printf_buffer_sz, cudaLimitPrintfFifoSize);
+  DP("printf buffer limit %zu\n", printf_buffer_sz);
+  printf_buffer_sz <<= TARGET_PRINTF_BUFFER_SIZE_FACTOR;
+  cudaDeviceSetLimit(cudaLimitPrintfFifoSize, printf_buffer_sz);
+  DP("Setting new printf buffer limit to %zu\n", printf_buffer_sz);
+#endif
 
   return OFFLOAD_SUCCESS;
 }
