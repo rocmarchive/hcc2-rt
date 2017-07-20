@@ -54,7 +54,7 @@ EXTERN int omp_get_max_threads(void) {
     rc = GetNumberOfProcsInTeam();
     ASSERT0(LT_FUSSY, rc >= 0, "bad number of threads");
   }
-  PRINT(LD_IO, "call omp_get_num_threads() return %\n", rc);
+  PRINT(LD_IO, "call omp_get_max_threads() return %\n", rc);
   return rc;
 }
 
