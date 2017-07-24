@@ -37,7 +37,6 @@
 #define WARPSIZE 32
 //#define warpSize WARPSIZE //no need, as warpSize is a cuda builtin value
 #endif
-#define warpSize WARPSIZE
 #define MAX_NUM_WARPS (MAX_NUM_TEAMS * THREAD_ABSOLUTE_LIMIT / WARPSIZE)
 #define MAX_NUM_THREADS MAX_NUM_WARPS *WARPSIZE
 
