@@ -32,8 +32,10 @@
 #define MAX_NUM_TEAMS TEAMS_ABSOLUTE_LIMIT
 #ifdef GPUCC_AMDGCN
 #define WARPSIZE 64
+#define warpSize WARPSIZE
 #else
 #define WARPSIZE 32
+//#define warpSize WARPSIZE //no need, as warpSize is a cuda builtin value
 #endif
 #define MAX_NUM_WARPS (MAX_NUM_TEAMS * THREAD_ABSOLUTE_LIMIT / WARPSIZE)
 #define MAX_NUM_THREADS MAX_NUM_WARPS *WARPSIZE
