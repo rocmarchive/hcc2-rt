@@ -72,8 +72,9 @@ add_custom_command(
 add_custom_target(utilities DEPENDS set-linkage)
 
 # We want set-linkage in the distribution for library builders to use
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/set-linkage DESTINATION "bin")
-
-# other utilities we want in the installation
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/bin/bundle.sh DESTINATION "bin")
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/bin/unbundle.sh DESTINATION "bin")
+# Also install shell utilities that are nice to have for debugging
+install(PROGRAMS
+   ${CMAKE_CURRENT_BINARY_DIR}/set-linkage
+   ${CMAKE_CURRENT_SOURCE_DIR}/bin/bundle.sh
+   ${CMAKE_CURRENT_SOURCE_DIR}/bin/unbundle.sh
+   DESTINATION "bin")
