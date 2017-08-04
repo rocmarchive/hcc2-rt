@@ -435,22 +435,22 @@ EXTERN long __xlf_omp_get_num_teams_i4() {
 }
 
 EXTERN void xlf_debug_print_int(int *p) {
-	printf("xlf DEBUG %d): %p %d\n", omp_get_team_num(), p, p==0?0:*p);
+	PRINT(LD_TASK,"xlf DEBUG %d): %p %d\n", omp_get_team_num(), p, p==0?0:*p);
 }
 
 EXTERN void xlf_debug_print_long(long *p) {
-	printf("xlf DEBUG %d): %p %ld\n", omp_get_team_num(), p, p==0?0:*p);
+	PRINT(LD_TASK,"xlf DEBUG %d): %p %ld\n", omp_get_team_num(), p, p==0?0:*p);
 }
 
 EXTERN void xlf_debug_print_float(float *p) {
-	printf("xlf DEBUG %d): %p %f\n", omp_get_team_num(), p, p==0?0:*p);
+	PRINT(LD_TASK,"xlf DEBUG %d): %p %f\n", omp_get_team_num(), p, p==0?0:*p);
 }
 
 EXTERN void xlf_debug_print_double(double *p) {
-	printf("xlf DEBUG %d): %p %f\n", omp_get_team_num(), p, p==0?0:*p);
+	PRINT(LD_TASK,"xlf DEBUG %d): %p %f\n", omp_get_team_num(), p, p==0?0:*p);
 }
 
 EXTERN void xlf_debug_print_addr(void *p) {
-	printf("xlf DEBUG %d): %p \n", omp_get_team_num(), p);
+	PRINT(LD_TASK,"xlf DEBUG %d): %p \n", omp_get_team_num(), p);
 }
 

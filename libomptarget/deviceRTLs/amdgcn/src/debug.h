@@ -118,7 +118,9 @@
 #if OMPTARGET_NVPTX_DEBUG
 #define OMPTARGET_NVPTX_WARNING (LW_SET_NONE)
 #else
-#define OMPTARGET_NVPTX_WARNING (LW_SET_FUSSY)
+// #define OMPTARGET_NVPTX_WARNING (LW_SET_FUSSY)
+// Turn off printing when no debug 
+#define OMPTARGET_NVPTX_WARNING (LW_SET_NONE)
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -19,13 +19,13 @@
 
 // cannot implement atomic_start and atomic_end for GPU. Report runtime error
 EXTERN void __kmpc_atomic_start() {
-  printf("__kmpc_atomic_start not supported\n");
+  PRINT0(LD_TASK,"__kmpc_atomic_start not supported\n");
   __device_trap();
   return;
 }
 
 EXTERN void __kmpc_atomic_end() {
-  printf("__kmpc_atomic_end not supported\n");
+  PRINT0(LD_TASK,"__kmpc_atomic_end not supported\n");
   __device_trap();
   return;
 }
@@ -293,7 +293,7 @@ INLINE __device__ void dc_div(double complex *lhs, double complex rhs) {
   EXTERN void __kmpc_atomic_cmplx8_##_op(kmp_Indent *id_ref, int32_t gtid,     \
                                          double _Complex *lhs,                 \
                                          double _Complex rhs) {                \
-    printf("Double complex atomic operation not supported\n");                 \
+    PRINT0(LD_SYNC,"Double complex atomic operation not supported\n");                 \
     __device_trap();                                                           \
     return;                                                                    \
   }                                                                            \
