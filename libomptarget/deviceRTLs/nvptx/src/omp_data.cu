@@ -45,9 +45,7 @@ __device__ __shared__ DataSharingStateTy DataSharingState;
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// Scratchpad for teams reduction.  FIXME: allocate it in the offload library.
+// Scratchpad for teams reduction.
 ////////////////////////////////////////////////////////////////////////////////
-// FIXME
-__device__ char scratchpad[262144];
-__device__ unsigned timestamp = 0;
+__device__ __shared__ void *ReductionScratchpadPtr;
 

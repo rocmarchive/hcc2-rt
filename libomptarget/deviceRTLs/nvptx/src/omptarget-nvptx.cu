@@ -50,10 +50,12 @@ INLINE unsigned n_sm() {
 }
 
 EXTERN void __kmpc_kernel_init(int ThreadLimit,
-                               int16_t RequiresOMPRuntime) {
+                               int16_t RequiresOMPRuntime,
+                               void *ReductionScratchpadPtr) {
   PRINT(LD_IO, "call to __kmpc_kernel_init with version %f\n",
         OMPTARGET_NVPTX_VERSION);
 
+  SetTeamsReductionScratchpadPtr(ReductionScratchpadPtr);
   if (!RequiresOMPRuntime) {
     // If OMP runtime is not required don't initialize OMP state.
     setExecutionParameters(Generic, RuntimeUninitialized);
@@ -104,9 +106,11 @@ EXTERN void __kmpc_kernel_deinit(int16_t IsOMPRuntimeInitialized) {
 
 EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit,
                                     int16_t RequiresOMPRuntime,
-                                    int16_t RequiresDataSharing) {
+                                    int16_t RequiresDataSharing,
+                                    void *ReductionScratchpadPtr) {
   PRINT0(LD_IO, "call to __kmpc_spmd_kernel_init\n");
 
+  SetTeamsReductionScratchpadPtr(ReductionScratchpadPtr);
   if (!RequiresOMPRuntime) {
     // If OMP runtime is not required don't initialize OMP state.
     setExecutionParameters(Spmd, RuntimeUninitialized);

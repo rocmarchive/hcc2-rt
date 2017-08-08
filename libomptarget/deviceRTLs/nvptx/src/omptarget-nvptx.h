@@ -302,8 +302,7 @@ private:
 extern __device__ __shared__ omptarget_nvptx_ThreadPrivateContext
     *omptarget_nvptx_threadPrivateContext;
 extern __device__ __shared__ uint32_t execution_param;
-extern __device__ char scratchpad[262144];
-extern __device__ unsigned timestamp;
+extern __device__ __shared__ void *ReductionScratchpadPtr;
 
 ////////////////////////////////////////////////////////////////////////////////
 // work function (outlined parallel/simd functions) and arguments.

@@ -82,3 +82,10 @@ INLINE unsigned long PadBytes(unsigned long size, unsigned long alignment);
 // Named Barrier Routines
 ////////////////////////////////////////////////////////////////////////////////
 INLINE void named_sync(const int barrier, const int num_threads);
+
+////////////////////////////////////////////////////////////////////////////////
+// Teams Reduction Scratchpad Helpers
+////////////////////////////////////////////////////////////////////////////////
+INLINE unsigned int *GetTeamsReductionTimestamp();
+INLINE char *GetTeamsReductionScratchpad();
+INLINE void SetTeamsReductionScratchpadPtr(void *ScratchpadPtr);

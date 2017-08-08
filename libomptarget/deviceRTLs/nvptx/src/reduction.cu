@@ -1098,13 +1098,16 @@ int32_t nvptx_teams_reduce_nowait(
 
   // Team masters of all teams write to the scratchpad.
   if (ThreadId == 0) {
+    unsigned int *timestamp = GetTeamsReductionTimestamp();
+    char *scratchpad = GetTeamsReductionScratchpad();
+
     scratchFct(reduce_data, scratchpad, TeamId, NumTeams);
     __threadfence();
 
     // atomicInc increments 'timestamp' and has a range [0, NumTeams-1].
     // It resets 'timestamp' back to 0 once the last team increments
     // this counter.
-    unsigned val = atomicInc(&timestamp, NumTeams-1);
+    unsigned val = atomicInc(timestamp, NumTeams-1);
     IsLastTeam = val == NumTeams - 1;
   }
 
@@ -1130,6 +1133,7 @@ int32_t nvptx_teams_reduce_nowait(
     return 0;
 
   // Load from scratchpad and reduce.
+  char *scratchpad = GetTeamsReductionScratchpad();
   ldFct(reduce_data, scratchpad, ThreadId, NumTeams, /*Load only*/0);
   for (uint32_t i = NumThreads + ThreadId; i < NumTeams; i += NumThreads)
     ldFct(reduce_data, scratchpad, i, NumTeams, /*Load and reduce*/1);

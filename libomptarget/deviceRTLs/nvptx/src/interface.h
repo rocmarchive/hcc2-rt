@@ -1250,11 +1250,13 @@ EXTERN void __array_atomic_float8_max(kmp_Indent *id_ref, int32_t tid,
                                       double *lhs, double *rhs, int64_t n);
 
 // non standard
-EXTERN void __kmpc_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime);
+EXTERN void __kmpc_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime,
+                               void *ReductionScratchpadPtr);
 EXTERN void __kmpc_kernel_deinit(int16_t IsOMPRuntimeInitialized);
 EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit,
                                     int16_t RequiresOMPRuntime,
-                                    int16_t RequiresDataSharing);
+                                    int16_t RequiresDataSharing,
+                                    void *ReductionScratchpadPtr);
 EXTERN void __kmpc_spmd_kernel_deinit();
 EXTERN void __kmpc_kernel_prepare_parallel(void *WorkFn, int16_t IsOMPRuntimeInitialized);
 EXTERN bool __kmpc_kernel_parallel(void **WorkFn, int16_t IsOMPRuntimeInitialized);
