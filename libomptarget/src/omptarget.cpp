@@ -1471,8 +1471,8 @@ static int target_data_begin(DeviceTy &Device, int32_t arg_num,
     void *TgtPtrBegin = Device.getOrAllocTgtPtr(HstPtrBegin, HstPtrBase,
         data_size, IsNew, IsImplicit, UpdateRef);
     if (!TgtPtrBegin && data_size) {
-      // If data_size==0, then the argument is a pointer to NULL, so
-      // getOrAlloc() returning NULL is not an error.
+      // If data_size==0, then the argument could be a zero-length pointer to
+      // NULL, so getOrAlloc() returning NULL is not an error.
       DP("Call to getOrAllocTgtPtr returned null pointer (device failure or "
           "illegal mapping).\n");
     }
@@ -1481,16 +1481,10 @@ static int target_data_begin(DeviceTy &Device, int32_t arg_num,
         (IsNew ? "" : " not"));
 
     if (arg_types[i] & OMP_TGT_MAPTYPE_RETURN_PARAM) {
-      void *ret_ptr;
-      if (arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ)
-        ret_ptr = Pointer_TgtPtrBegin;
-      else {
-        bool IsLast; // not used
-        ret_ptr = Device.getTgtPtrBegin(HstPtrBegin, 0, IsLast, false);
-      }
-
-      DP("Returning device pointer " DPxMOD "\n", DPxPTR(ret_ptr));
-      args_base[i] = ret_ptr;
+      uintptr_t Delta = (uintptr_t)HstPtrBegin - (uintptr_t)HstPtrBase;
+      void *TgtPtrBase = (void *)((uintptr_t)TgtPtrBegin - Delta);
+      DP("Returning device pointer " DPxMOD "\n", DPxPTR(TgtPtrBase));
+      args_base[i] = TgtPtrBase;
     }
 
     if (arg_types[i] & OMP_TGT_MAPTYPE_TO) {
