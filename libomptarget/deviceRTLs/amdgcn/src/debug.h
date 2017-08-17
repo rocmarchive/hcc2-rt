@@ -29,6 +29,12 @@
 #ifndef _OMPTARGET_NVPTX_DEBUG_H_
 #define _OMPTARGET_NVPTX_DEBUG_H_
 
+#ifdef GPUCC_AMDGCN
+#define LANEMASK 0x3F
+#else
+#define LANEMASK 0x1F
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 // set desired level of debugging
 ////////////////////////////////////////////////////////////////////////////////
@@ -167,7 +173,7 @@
   {                                                                            \
     if (omptarget_device_environment.debug_mode && DON(_flag)) {               \
       printf("<b %2d, t %4d, w %2d, l %2d>: " _str, blockIdx.x, threadIdx.x,   \
-             threadIdx.x / warpSize, threadIdx.x & 0x1F);                      \
+         threadIdx.x / warpSize, threadIdx.x & LANEMASK);                      \
     }                                                                          \
   }
 
@@ -175,7 +181,7 @@
   {                                                                            \
     if (omptarget_device_environment.debug_mode && DON(_flag)) {               \
       printf("<b %2d, t %4d, w %2d, l %2d>: " _str, blockIdx.x, threadIdx.x,   \
-             threadIdx.x / warpSize, threadIdx.x & 0x1F, _args);               \
+         threadIdx.x / warpSize, threadIdx.x & LANEMASK, _args);               \
     }                                                                          \
   }
 #else
@@ -224,7 +230,7 @@
   {                                                                            \
     if (TON(_flag) && !(_cond)) {                                              \
       printf("<b %3d, t %4d, w %2d, l %2d> ASSERT: " _str "\n", blockIdx.x,    \
-             threadIdx.x, threadIdx.x / warpSize, threadIdx.x & 0x1F);         \
+             threadIdx.x, threadIdx.x / warpSize, threadIdx.x & LANEMASK);     \
       assert(_cond);                                                           \
     }                                                                          \
   }
@@ -232,7 +238,7 @@
   {                                                                            \
     if (TON(_flag) && !(_cond)) {                                              \
       printf("<b %3d, t %4d, w %2d, l %d2> ASSERT: " _str "\n", blockIdx.x,    \
-             threadIdx.x, threadIdx.x / warpSize, threadIdx.x & 0x1F, _args);  \
+         threadIdx.x, threadIdx.x / warpSize, threadIdx.x & LANEMASK, _args);  \
       assert(_cond);                                                           \
     }                                                                          \
   }
@@ -261,14 +267,14 @@
   {                                                                            \
     if (WON(_flag)) {                                                          \
       printf("<b %2d, t %4d, w %2d, l %2d> WARNING: " _str, blockIdx.x,        \
-             threadIdx.x, threadIdx.x / warpSize, threadIdx.x & 0x1F);         \
+             threadIdx.x, threadIdx.x / warpSize, threadIdx.x & LANEMASK);     \
     }                                                                          \
   }
 #define WARNING(_flag, _str, _args...)                                         \
   {                                                                            \
     if (WON(_flag)) {                                                          \
       printf("<b %2d, t %4d, w %2d, l %2d> WARNING: " _str, blockIdx.x,        \
-             threadIdx.x, threadIdx.x / warpSize, threadIdx.x & 0x1F, _args);  \
+         threadIdx.x, threadIdx.x / warpSize, threadIdx.x & LANEMASK, _args);  \
     }                                                                          \
   }
 
