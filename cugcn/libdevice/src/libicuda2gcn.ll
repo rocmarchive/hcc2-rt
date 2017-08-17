@@ -205,13 +205,13 @@ define i32 @nvvm.clz.ll(i64 %a) #3 {
 
 ; Function Attrs: alwaysinline nounwind
 define void @nvvm.membar.cta() #3 {
-  fence syncscope(3) seq_cst
+  fence syncscope("workgroup") seq_cst
   ret void
 }
 
 ; Function Attrs: alwaysinline nounwind
 define void @nvvm.membar.gl() #3 {
-  fence syncscope(2) seq_cst
+  fence syncscope("agent") seq_cst
   ret void
 }
 
