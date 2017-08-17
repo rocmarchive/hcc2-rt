@@ -34,11 +34,19 @@ if (HCC2_INSTALL_PREFIX)
 else()
   set(HCC2_BINDIR ${LLVM_BUILD_BINARY_DIR}/bin)
   set(HCC2_INCDIR ${LLVM_BUILD_BINARY_DIR}/include)
-  set(HCC2_LIBDIR ${LLVM_LIBRARY_DIRS}/lib)
+  set(HCC2_LIBDIR ${LLVM_LIBRARY_DIRS})
 endif()
 
-set(HCC2_LIBS ${HCC2_LIBDIR}/libLLVMBitWriter.a ${HCC2_LIBDIR}/libLLVMBitReader.a ${HCC2_LIBDIR}/libLLVMCore.a ${HCC2_LIBDIR}/libLLVMSupport.a ${HCC2_LIBDIR}/libLLVMDemangle.a 
- ${HCC2_LIBDIR}/libLLVMMC.a ${HCC2_LIBDIR}/libLLVMBinaryFormat.a )
+set(HCC2_LIBS
+  ${HCC2_LIBDIR}/libLLVMBitWriter.a
+  ${HCC2_LIBDIR}/libLLVMBitReader.a
+  ${HCC2_LIBDIR}/libLLVMObject.a
+  ${HCC2_LIBDIR}/libLLVMCore.a
+  ${HCC2_LIBDIR}/libLLVMDemangle.a
+  ${HCC2_LIBDIR}/libLLVMMC.a
+  ${HCC2_LIBDIR}/libLLVMMCParser.a
+  ${HCC2_LIBDIR}/libLLVMSupport.a
+  ${HCC2_LIBDIR}/libLLVMBinaryFormat.a )
 
 mark_as_advanced(
   HCC2_DIR_FOUND
