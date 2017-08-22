@@ -3,7 +3,7 @@
 
 #define N 1024
 
-#define EXPLICIT_TARGET_TASK 1
+#define EXPLICIT_TARGET_TASK 0
 
 int A[N];
 int B[N];
