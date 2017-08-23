@@ -109,7 +109,7 @@ public:
   static const int HardTeamLimit = 1<<16; // 64k
   static const int HardThreadLimit = 1024;
   static const int DefaultNumTeams = 128;
-  static const int DefaultNumThreads = 128;
+  static const int DefaultNumThreads = 1024;
 
   // Record entry point associated with device
   void addOffloadEntry(int32_t device_id, __tgt_offload_entry entry) {
