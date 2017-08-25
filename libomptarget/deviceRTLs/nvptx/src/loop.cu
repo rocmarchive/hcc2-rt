@@ -692,3 +692,36 @@ void __kmpc_for_static_init_8u_simple_generic(
 EXTERN void __kmpc_for_static_fini(kmp_Indent *loc, int32_t global_tid) {
   PRINT0(LD_IO, "call kmpc_for_static_fini\n");
 }
+
+EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
+  int32_t varNum, void *array) {
+  PRINT0(LD_IO, "call to __kmpc_reduce_conditional_lastprivate(...)\n");
+
+  omptarget_nvptx_TeamDescr &teamDescr = getMyTeamDescriptor();
+  int tid = GetOmpThreadId(GetLogicalThreadIdInBlock(), isSPMDMode(),
+                           isRuntimeUninitialized());
+  uint64_t *Buffer = teamDescr.getLastprivateIterBuffer();
+  for (unsigned i = 0; i < varNum; i++) {
+    // Reset buffer.
+    if (tid == 0)
+      *Buffer = 0;  // Reset to minimum loop iteration value.
+
+    // Barrier.
+    __syncthreads(); // All threads participate
+
+    // Atomic max of iterations.
+    uint64_t *varArray = (uint64_t *) array;
+    uint64_t elem = varArray[i];
+    (void) atomicMax((unsigned long long int *) Buffer, (unsigned long long int) elem);
+
+    // Barrier.
+    __syncthreads(); // All threads participate
+    __threadfence_block();
+
+    // Read max value and update thread private array.
+    varArray[i] = *Buffer;
+
+    // Barrier.
+    __syncthreads(); // All threads participate
+  }
+}

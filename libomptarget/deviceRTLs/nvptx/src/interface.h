@@ -330,6 +330,10 @@ EXTERN void __kmpc_dispatch_fini_4u(kmp_Indent *loc, int32_t global_tid);
 EXTERN void __kmpc_dispatch_fini_8(kmp_Indent *loc, int32_t global_tid);
 EXTERN void __kmpc_dispatch_fini_8u(kmp_Indent *loc, int32_t global_tid);
 
+// Support for reducing conditional lastprivate variables
+EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc,
+  int32_t global_tid, int32_t varNum, void *array);
+
 // reduction
 EXTERN int32_t __kmpc_reduce41(kmp_Indent *loc, int32_t global_tid,
                                int32_t varNum, size_t reduceSize,
