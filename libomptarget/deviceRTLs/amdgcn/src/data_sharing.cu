@@ -35,12 +35,24 @@ __device__ static unsigned getMasterThreadId() {
   return (getNumThreads() - 1) & (~Mask);
 }
 // The lowest ID among the active threads in the warp.
-__device__ static unsigned getWarpMasterActiveThreadId() {
+EXTERN int32_t __kmpc_warp_master_active_thread_id() {
 #ifdef GPUCC_AMDGCN
-  unsigned long long Mask = __ballot64(true);
-  unsigned ShNum = DS_Max_Worker_Warp_Size - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
-  unsigned Sh = Mask << ShNum;
-  return __popcll(Sh);
+  int64_t Mask = __kmpc_warp_active_thread_mask64();
+  unsigned tid  = threadIdx.x;
+  unsigned laneid = (tid & 0X3F);
+  int64_t Sh;
+  unsigned Shnum;
+  if (laneid < 32) {
+   Mask = Mask << 32 ;
+   Shnum = 32-laneid;
+  } else  {
+   Shnum = 64-laneid;
+  }
+  Sh = Mask << Shnum;
+  unsigned popret = __popcll(Sh);
+  PRINT(LD_IO,"__kmpc_warp_master_active_thread_id: tid=%d laneid=%d Shnum=%d RETURN VAL=%d\n", 
+   tid, laneid, Shnum, popret);
+  return popret;
 #else
   unsigned long long Mask = __ballot(true);
   unsigned long long ShNum = 32 - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
@@ -48,6 +60,7 @@ __device__ static unsigned getWarpMasterActiveThreadId() {
   return __popc(Sh);
 #endif
 }
+
 // Return true if this is the master thread.
 __device__ static bool IsMasterThread() {
   return getMasterThreadId() == getThreadId();
@@ -58,7 +71,7 @@ __device__ static bool IsMasterThread() {
 //}
 // Return true if this is the first active thread in the warp.
 __device__ static bool IsWarpMasterActiveThread() {
-  return getWarpMasterActiveThreadId() == 0u;
+  return (__kmpc_warp_master_active_thread_id() == 0u);
 }
 /// Return the provided size aligned to the size of a pointer.
 __device__ static size_t AlignVal(size_t Val) {
@@ -70,21 +83,26 @@ __device__ static size_t AlignVal(size_t Val) {
   return Val;
 }
 
-
-#define DSFLAG 0
-#define DSFLAG_INIT 0
+// Turn on Datasharing debug with other debugging
+#if OMPTARGET_NVPTX_DEBUG
+#define DSFLAG 1
+#define DSFLAG_INIT 1
 #define DSPRINT(_flag, _str, _args...)                                         \
   {                                                                            \
     if (_flag) {                                                               \
-      /*printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x, _args);*/          \
+      printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x, _args);          \
     }                                                                          \
   }
 #define DSPRINT0(_flag, _str)                                                  \
   {                                                                            \
     if (_flag) {                                                               \
-      /*printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x);*/                 \
+      printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x);                 \
     }                                                                          \
   }
+#else 
+#define DSPRINT0(flag, str)
+#define DSPRINT(flag, str, _args...)
+#endif
 
 // Initialize the shared data structures. This is expected to be called for the master thread and warp masters.
 // \param RootS: A pointer to the root of the data sharing stack.
@@ -103,10 +121,14 @@ EXTERN void __kmpc_initialize_data_sharing_environment(
 
   DataSharingState.SlotPtr[WID] = RootS;
   DataSharingState.StackPtr[WID] = (void*)&RootS->Data[0];
+  if (InitialDataSize == 256) { // Only zero for team master
+    DataSharingState.FramePtr[WID] = 0 ;
+    DataSharingState.ActiveThreads[WID] = 0 ;
+  }
 
   // We don't need to initialize the frame and active threads.
 
-  DSPRINT(DSFLAG_INIT,"Initial data size: %08x \n", InitialDataSize);
+  DSPRINT(DSFLAG_INIT,"Initial data size: %08lx \n", InitialDataSize);
   DSPRINT(DSFLAG_INIT,"Root slot at: %016llx \n", (long long)RootS);
   DSPRINT(DSFLAG_INIT,"Root slot data-end at: %016llx \n", (long long)RootS->DataEnd);
   DSPRINT(DSFLAG_INIT,"Root slot next at: %016llx \n", (long long)RootS->Next);
@@ -136,8 +158,8 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
   // data sharing.
   if (!IsOMPRuntimeInitialized) return (void *) &DataSharingState;
 
-  DSPRINT(DSFLAG,"Data Size %016llx\n", SharingDataSize);
-  DSPRINT(DSFLAG,"Default Data Size %016llx\n", SharingDefaultDataSize);
+  DSPRINT(DSFLAG,"Data Size %016lx\n", SharingDataSize);
+  DSPRINT(DSFLAG,"Default Data Size %016lx\n", SharingDefaultDataSize);
 
   unsigned WID = getWarpId();
 #ifdef GPUCC_AMDGCN
@@ -166,7 +188,11 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
   DSPRINT(DSFLAG,"Saved slot ptr at: %016llx \n", (long long)SlotP);
   DSPRINT(DSFLAG,"Saved stack ptr at: %016llx \n", (long long)StackP);
   DSPRINT(DSFLAG,"Saved frame ptr at: %016llx \n", (long long)FrameP);
+#ifdef GPUCC_AMDGCN
+  DSPRINT(DSFLAG,"Active threads: %08lx \n", ActiveT);
+#else
   DSPRINT(DSFLAG,"Active threads: %08x \n", ActiveT);
+#endif
 
   // Only the warp active master needs to grow the stack.
   if (IsWarpMasterActiveThread()) {
@@ -183,15 +209,15 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
     const uintptr_t CurrentEndAddress = (uintptr_t)SlotP->DataEnd;
     const uintptr_t RequiredEndAddress =CurrentStartAddress + (uintptr_t)SharingDataSize;
 
-    DSPRINT(DSFLAG,"Data Size %016llx\n", SharingDataSize);
-    DSPRINT(DSFLAG,"Default Data Size %016llx\n", SharingDefaultDataSize);
-    DSPRINT(DSFLAG,"Current Start Address %016llx\n", CurrentStartAddress);
-    DSPRINT(DSFLAG,"Current End Address %016llx\n", CurrentEndAddress);
-    DSPRINT(DSFLAG,"Required End Address %016llx\n", RequiredEndAddress);
+    DSPRINT(DSFLAG,"Data Size %016lx\n", SharingDataSize);
+    DSPRINT(DSFLAG,"Default Data Size %016lx\n", SharingDefaultDataSize);
+    DSPRINT(DSFLAG,"Current Start Address %016lx\n", CurrentStartAddress);
+    DSPRINT(DSFLAG,"Current End Address %016lx\n", CurrentEndAddress);
+    DSPRINT(DSFLAG,"Required End Address %016lx\n", RequiredEndAddress);
 #ifdef GPUCC_AMDGCN
-    DSPRINT(DSFLAG,"Active Threads %08x\n", ActiveT);
+    DSPRINT(DSFLAG,"Active Threads %08lx \n", ActiveT);
 #else
-    DSPRINT(DSFLAG,"Active Threads %08llx\n", ActiveT);
+    DSPRINT(DSFLAG,"Active Threads %08x \n", ActiveT);
 #endif
 
     // If we require a new slot, allocate it and initialize it (or attempt to reuse one). Also, set the shared stack and slot pointers to the new place. If we do not need to grow the stack, just adapt the stack and frame pointers.
@@ -213,7 +239,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
 
       if (!NewSlot) {
         NewSlot = ( __kmpc_data_sharing_slot *)malloc(sizeof(__kmpc_data_sharing_slot) + NewSize);
-        DSPRINT(DSFLAG,"New slot allocated %016llx (data size=%016llx)\n", (long long)NewSlot, NewSize);
+        DSPRINT(DSFLAG,"New slot allocated %016llx (data size=%016lx)\n", (long long)NewSlot, NewSize);
       }
 
       NewSlot->Next = 0;
@@ -240,7 +266,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
   // FIXME: Need to see the impact of doing it here.
   __threadfence_block();
 
-  DSPRINT0(DSFLAG,"Exiting __kmpc_data_sharing_environment_begin\n");
+  DSPRINT(DSFLAG,"Exiting __kmpc_data_sharing_environment_begin with FrameP %p\n",FrameP);
 
   // All the threads in this warp get the frame they should work with.
   return FrameP;
@@ -296,7 +322,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
     // Zero the bits in the mask. If it is still different from zero, then we have other threads that will return after the current ones.
     ActiveT &= ~CurActive;
 #ifdef GPUCC_AMDGCN
-    DSPRINT(DSFLAG,"Active threads: %08llx; New mask: %08llx\n", CurActive, ActiveT);
+    DSPRINT(DSFLAG,"Active threads: %08lx; New mask: %08lx \n", CurActive, ActiveT);
 #else
     DSPRINT(DSFLAG,"Active threads: %08x; New mask: %08x\n", CurActive, ActiveT);
 #endif
@@ -317,7 +343,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
       DSPRINT(DSFLAG,"Restored stack ptr at: %016llx \n",(long long)StackP);
       DSPRINT(DSFLAG,"Restored frame ptr at: %016llx \n", (long long)FrameP);
 #ifdef GPUCC_AMDGCN
-      DSPRINT(DSFLAG,"Active threads: %08llx \n", ActiveT);
+      DSPRINT(DSFLAG,"Active threads: %08lx \n", ActiveT);
 #else
       DSPRINT(DSFLAG,"Active threads: %08x \n", ActiveT);
 #endif
@@ -334,7 +360,9 @@ EXTERN void __kmpc_data_sharing_environment_end(
 
 EXTERN void* __kmpc_get_data_sharing_environment_frame(int32_t SourceThreadID,
                                                        int16_t IsOMPRuntimeInitialized){
-  DSPRINT0(DSFLAG,"Entering __kmpc_get_data_sharing_environment_frame\n");
+  unsigned tid  = getThreadId() ;
+  DSPRINT(DSFLAG,"Entering __kmpc_get_data_sharing_environment_frame id:%d this_tid:%d\n",
+    SourceThreadID,tid);
 
   // If the runtime has been elided, use __shared__ memory for master-worker
   // data sharing.  We're reusing the statically allocated data structure
@@ -345,10 +373,10 @@ EXTERN void* __kmpc_get_data_sharing_environment_frame(int32_t SourceThreadID,
 
   unsigned SourceWID = SourceThreadID >> DS_Max_Worker_Warp_Size_Log2;
 
-  DSPRINT(DSFLAG,"Source  warp: %d\n", SourceWID);
+  DSPRINT(DSFLAG,"Source  warp: %d shiftsize:%d \n", SourceWID, DS_Max_Worker_Warp_Size_Log2);
 
   void *P = DataSharingState.FramePtr[SourceWID];
-  DSPRINT0(DSFLAG,"Exiting __kmpc_get_data_sharing_environment_frame\n");
+  DSPRINT(DSFLAG,"Exiting __kmpc_get_data_sharing_environment_frame %p for tid:%d\n",P,tid);
   return P;
 }
 

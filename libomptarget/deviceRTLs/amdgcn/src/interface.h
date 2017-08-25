@@ -390,6 +390,7 @@ EXTERN void __kmpc_flush(kmp_Indent *loc);
 
 // vote
 EXTERN int32_t __kmpc_warp_active_thread_mask();
+EXTERN int32_t __kmpc_warp_master_active_thread_id();
 #ifdef GPUCC_AMDGCN
 EXTERN int64_t __kmpc_warp_active_thread_mask64();
 #endif

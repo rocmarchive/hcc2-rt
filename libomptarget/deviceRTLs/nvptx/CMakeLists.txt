@@ -71,7 +71,8 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
   
   # Activate RTL message dumps if requested by the user.
   if(LIBOMPTARGET_NVPTX_DEBUG)
-    set(CUDA_DEBUG -DOMPTARGET_NVPTX_DEBUG=-1 -g --ptxas-options=-v)
+    #set(CUDA_DEBUG -DOMPTARGET_NVPTX_DEBUG=-1 -g --ptxas-options=-v)
+    set(CUDA_DEBUG -DOMPTARGET_NVPTX_DEBUG=-1 -g )
   endif()
 
   # NVPTX runtime library has to be statically linked. Dynamic linking is not

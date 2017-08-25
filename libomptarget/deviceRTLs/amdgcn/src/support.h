@@ -20,7 +20,7 @@ EXTERN int32_t __clock();
 EXTERN int64_t __clock64();
 
 // CU id
-EXTERN unsigned int __smid() ;
+EXTERN unsigned __smid() ;
 
 // named sync
 EXTERN void __named_sync(const int barrier, const int num_threads);

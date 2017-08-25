@@ -66,7 +66,8 @@ enum DATA_SHARING_SIZES {
   // warp.
 #ifdef GPUCC_AMDGCN
   DS_Max_Worker_Warp_Size_Log2 = 6,
-  DS_Max_Worker_Warp_Size_Log2_Mask = (~0ull >> (64-DS_Max_Worker_Warp_Size_Log2)),
+  // DS_Max_Worker_Warp_Size_Log2_Mask = (~0u >> (64-DS_Max_Worker_Warp_Size_Log2)),
+  DS_Max_Worker_Warp_Size_Log2_Mask = 63, 
 #else
   DS_Max_Worker_Warp_Size_Log2 = 5,
   DS_Max_Worker_Warp_Size_Log2_Mask = (~0u >> (32-DS_Max_Worker_Warp_Size_Log2)),

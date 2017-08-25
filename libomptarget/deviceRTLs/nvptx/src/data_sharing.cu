@@ -64,20 +64,27 @@ __device__ static size_t AlignVal(size_t Val) {
 }
 
 
-#define DSFLAG 0
-#define DSFLAG_INIT 0
+#if 0
+#define DSFLAG 1
+#define DSFLAG_INIT 1
 #define DSPRINT(_flag, _str, _args...)                                         \
   {                                                                            \
     if (_flag) {                                                               \
-      /*printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x, _args);*/          \
+      printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x, _args);          \
     }                                                                          \
   }
 #define DSPRINT0(_flag, _str)                                                  \
   {                                                                            \
     if (_flag) {                                                               \
-      /*printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x);*/                 \
+      printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x);                 \
     }                                                                          \
   }
+#else
+#define DSFLAG 0
+#define DSFLAG_INIT 0
+#define DSPRINT(_flag, _str, _args...)
+#define DSPRINT0(_flag, _str)
+#endif
 
 // Initialize the shared data structures. This is expected to be called for the master thread and warp masters.
 // \param RootS: A pointer to the root of the data sharing stack.

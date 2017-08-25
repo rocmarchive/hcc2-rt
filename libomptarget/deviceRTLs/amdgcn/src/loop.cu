@@ -126,9 +126,12 @@ public:
     T ub = *pupper;
     ST stride = *pstride;
     T entityId, numberOfEntities;
+
     // init
     switch (schedtype) {
     case kmp_sched_static_chunk: {
+      // printf("sched = kmp_sched_static_chunk \n");
+    // init
       if (chunk > 0) {
         entityId = GetOmpThreadId(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
         numberOfEntities = GetNumberOfOmpThreads(tid, IsSPMDExecutionMode, IsOMPRuntimeUnavailable);
@@ -554,9 +557,9 @@ EXTERN void __kmpc_for_static_init_4(kmp_Indent *loc, int32_t global_tid,
                                      int32_t *plower, int32_t *pupper,
                                      int32_t *pstride, int32_t incr,
                                      int32_t chunk) {
-  PRINT0(LD_IO, "call kmpc_for_static_init_4\n");
   omptarget_nvptx_LoopSupport<int32_t, int32_t>::for_static_init(
       schedtype, plastiter, plower, pupper, pstride, chunk, isSPMDMode());
+  PRINT(LD_IO, "kmpc_for_static_init_4: plower:%d pupper:%d\n",*plower,*pupper);
 }
 
 EXTERN void __kmpc_for_static_init_4u(kmp_Indent *loc, int32_t global_tid,
@@ -564,9 +567,9 @@ EXTERN void __kmpc_for_static_init_4u(kmp_Indent *loc, int32_t global_tid,
                                       uint32_t *plower, uint32_t *pupper,
                                       int32_t *pstride, int32_t incr,
                                       int32_t chunk) {
-  PRINT0(LD_IO, "call kmpc_for_static_init_4u\n");
   omptarget_nvptx_LoopSupport<uint32_t, int32_t>::for_static_init(
       schedtype, plastiter, plower, pupper, pstride, chunk, isSPMDMode());
+  PRINT(LD_IO, "kmpc_for_static_init_4u: plower:%d pupper:%d\n",*plower,*pupper);
 }
 
 EXTERN void __kmpc_for_static_init_8(kmp_Indent *loc, int32_t global_tid,
@@ -574,9 +577,9 @@ EXTERN void __kmpc_for_static_init_8(kmp_Indent *loc, int32_t global_tid,
                                      int64_t *plower, int64_t *pupper,
                                      int64_t *pstride, int64_t incr,
                                      int64_t chunk) {
-  PRINT0(LD_IO, "call kmpc_for_static_init_8\n");
   omptarget_nvptx_LoopSupport<int64_t, int64_t>::for_static_init(
       schedtype, plastiter, plower, pupper, pstride, chunk, isSPMDMode());
+  PRINT(LD_IO, "kmpc_for_static_init_8: plower:%ld pupper:%ld\n",*plower,*pupper);
 }
 
 EXTERN void __kmpc_for_static_init_8u(kmp_Indent *loc, int32_t global_tid,
@@ -584,9 +587,9 @@ EXTERN void __kmpc_for_static_init_8u(kmp_Indent *loc, int32_t global_tid,
                                       uint64_t *plower, uint64_t *pupper,
                                       int64_t *pstride, int64_t incr,
                                       int64_t chunk) {
-  PRINT0(LD_IO, "call kmpc_for_static_init_8u\n");
   omptarget_nvptx_LoopSupport<uint64_t, int64_t>::for_static_init(
       schedtype, plastiter, plower, pupper, pstride, chunk, isSPMDMode());
+  PRINT(LD_IO, "kmpc_for_static_init_8u: plower:%ld pupper:%ld\n",*plower,*pupper);
 }
 
 EXTERN

@@ -73,9 +73,9 @@
 #define OMPTARGET_NVPTX_DEBUG LD_SET_NONE
 #elif OMPTARGET_NVPTX_DEBUG
 // Only print this warning if BUILD_TYPE was not Debug
-#ifndef OMPTARGET_DEBUG
-#warning debug is used, not good for measurements
-#endif
+// #ifndef OMPTARGET_DEBUG
+// #warning debug is used, not good for measurements
+// #endif
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////

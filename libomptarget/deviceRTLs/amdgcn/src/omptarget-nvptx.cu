@@ -19,7 +19,11 @@
 
 #ifdef GPUCC_AMDGCN
 INLINE unsigned smid() {
-  return __smid();
+  // return __smid();
+  // For amdgcn, use a virtual smid based on global thread number
+  unsigned id = ((blockIdx.x*blockDim.x) + threadIdx.x) / warpSize;
+  PRINT(LD_IO, "smid() returns value %d with MAX_SM %d\n",id,MAX_SM);
+  return id;
 }
 #else
 INLINE unsigned smid() {
