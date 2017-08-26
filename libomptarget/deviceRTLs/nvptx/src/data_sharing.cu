@@ -13,6 +13,12 @@
 #include "omptarget-nvptx.h"
 #include <stdio.h>
 
+#define DSFLAG 1
+#define DSFLAG_INIT 1
+
+#define DSPRINT0 PRINT0
+#define DSPRINT  PRINT
+
 // Number of threads in the CUDA block.
 __device__ static unsigned getNumThreads() {
   return blockDim.x;
@@ -41,6 +47,10 @@ __device__ static unsigned getWarpMasterActiveThreadId() {
   unsigned long long Sh = Mask << ShNum;
   return __popc(Sh);
 }
+// The lowest ID among the active threads in the warp.
+EXTERN int32_t __kmpc_warp_master_active_thread_id() {
+  return getWarpMasterActiveThreadId();
+}
 // Return true if this is the master thread.
 __device__ static bool IsMasterThread() {
   return getMasterThreadId() == getThreadId();
@@ -63,7 +73,7 @@ __device__ static size_t AlignVal(size_t Val) {
   return Val;
 }
 
-
+#if 0
 #if 0
 #define DSFLAG 1
 #define DSFLAG_INIT 1
@@ -84,6 +94,7 @@ __device__ static size_t AlignVal(size_t Val) {
 #define DSFLAG_INIT 0
 #define DSPRINT(_flag, _str, _args...)
 #define DSPRINT0(_flag, _str)
+#endif
 #endif
 
 // Initialize the shared data structures. This is expected to be called for the master thread and warp masters.
