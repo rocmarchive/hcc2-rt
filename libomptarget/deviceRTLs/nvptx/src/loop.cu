@@ -700,6 +700,9 @@ EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
   omptarget_nvptx_TeamDescr &teamDescr = getMyTeamDescriptor();
   int tid = GetOmpThreadId(GetLogicalThreadIdInBlock(), isSPMDMode(),
                            isRuntimeUninitialized());
+  uint32_t NumThreads = GetNumberOfOmpThreads(GetLogicalThreadIdInBlock(),
+      isSPMDMode(), isRuntimeUninitialized());
+  int NumWarps = ((NumThreads + warpSize - 1) / warpSize);
   uint64_t *Buffer = teamDescr.getLastprivateIterBuffer();
   for (unsigned i = 0; i < varNum; i++) {
     // Reset buffer.
@@ -707,7 +710,7 @@ EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
       *Buffer = 0;  // Reset to minimum loop iteration value.
 
     // Barrier.
-    __syncthreads(); // All threads participate
+    named_sync(L1_BARRIER, warpSize * NumWarps);
 
     // Atomic max of iterations.
     uint64_t *varArray = (uint64_t *) array;
@@ -715,13 +718,13 @@ EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
     (void) atomicMax((unsigned long long int *) Buffer, (unsigned long long int) elem);
 
     // Barrier.
-    __syncthreads(); // All threads participate
     __threadfence_block();
+    named_sync(L1_BARRIER, warpSize * NumWarps);
 
     // Read max value and update thread private array.
     varArray[i] = *Buffer;
 
     // Barrier.
-    __syncthreads(); // All threads participate
+    named_sync(L1_BARRIER, warpSize * NumWarps);
   }
 }
