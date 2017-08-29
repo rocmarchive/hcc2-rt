@@ -1172,20 +1172,7 @@ int32_t nvptx_teams_reduce_nowait(
     : /*Master thread only*/ 1;
   uint32_t TeamId = GetBlockIdInKernel();
   uint32_t NumTeams = GetNumberOfBlocksInKernel();
-  //XXX: infer-address-spaces Pass can't infer AS in the following store/load
-  // but the old nvptx-infer-addrspace Pass can.
-  //
-  // store volatile i8 %302, i8* addrspacecast (i8 addrspace(3)* @_ZZ32__kmpc_nvptx_teams_reduce_nowaitE10IsLastTeam to i8*), align 1
-  //
-  // shall be inferred to:
-  // store volatile i8 %302, i8 addrspace(3)* @_ZZ32__kmpc_nvptx_teams_reduce_nowaitE10IsLastTeam, align 1
-  //
-  //FIXME: AS3 to AS0 cast is not allowed in AMDGCN. Remove volatile specifier to allow optimization.
-#ifdef GPUCC_AMDGCN
-  __shared__ bool IsLastTeam;
-#else
   __shared__ volatile bool IsLastTeam;
-#endif
 
   // Team masters of all teams write to the scratchpad.
   if (ThreadId == 0) {
