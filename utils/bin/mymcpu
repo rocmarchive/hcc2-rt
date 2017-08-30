@@ -110,9 +110,9 @@ function code2gpu(){
       ;;
       "k4000")   gpuname="sm_30"
       ;;
-      "sm_50")   gpuname="sm_50"
+      "sm_35")   gpuname="sm_35"
       ;;
-      "gtx980")  gpuname="sm_50"
+      "gtx980")  gpuname="sm_35"
       ;;
       *) gpuname="unknown" 
       ;;
@@ -136,7 +136,7 @@ function gpu2code(){
       ;;
       "gfx900") codename="vega"
       ;;
-      "sm_50") codename="gtx980"
+      "sm_35") codename="gtx980"
       ;;
       "sm_30") codename="k4000"
       ;;
@@ -168,7 +168,6 @@ if [ "$VENDOR" == "AMD" ] ; then
   if [ "$CPU" == "A10-7850K" ] || \
      [ "$CPU" == "A10-7870K" ] || \
      [ "$CPU" == "A10-7700K" ] || \
-x
      [ "$CPU" == "A6-7400K" ] || \
      [ "$CPU" == "A10 PRO-7350B" ] || \
      [ "$CPU" == "A10-7800K" ] ; then 
@@ -185,12 +184,14 @@ x
 
 fi
 if [ "$thisname" == "" ] ; then
-   thisname=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/1/properties | grep device_id | cut -d" " -f2 | xargs printf "%x\n"`
-   if [ "$thisname" == "6863" ] ; then 
-      thisname="vega"
-   else 
-      if [ "$thisname" == "7300" ] ; then 
-         thisname="fiji"
+   if [ -f "/sys/devices/virtual/kfd/kfd/topology/nodes/1/properties" ] ; then
+      thisname=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/1/properties | grep device_id | cut -d" " -f2 | xargs printf "%x\n"`
+      if [ "$thisname" == "6863" ] ; then
+         thisname="vega"
+      else
+         if [ "$thisname" == "7300" ] ; then
+            thisname="fiji"
+         fi
       fi
    fi
    if [ "$thisname" == "" ] ; then
@@ -199,10 +200,14 @@ if [ "$thisname" == "" ] ; then
          thisname="sm_30"
          lspci | grep -m1 -q GK106GL
          if [ $? != 0 ] ; then 
-             thisname="sm_50"
+             thisname="sm_35"
              lspci | grep -m1 NVIDIA | grep -q 13c0 
              if [ $? != 0 ] ; then 
-                thisname=""
+                thisname="sm_35"
+                lspci | grep -m1 -q "GTX 980"
+                if [ $? != 0 ] ; then 
+                   thisname=""
+                fi
              fi
          fi
       fi
