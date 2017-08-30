@@ -73,7 +73,7 @@ add_custom_command(
 
 add_custom_command(
   OUTPUT set-linkage
-  COMMAND ${HCC2_BINDIR}/clang++ -pthread -o set-linkage set-linkage.o ${HCC2_LIBS} -ltinfo -L${HCC2_LIBDIR} -Wl,-rpath ${HCC2_LIBDIR} -lncurses -ldl
+  COMMAND ${HCC2_BINDIR}/clang++ -pthread -o set-linkage set-linkage.o ${HCC2_LIBS} -ltinfo -L${HCC2_LIBDIR} -Wl,-rpath ${HCC2_LIBDIR} -ldl
   DEPENDS set-linkage.o
   )
 add_custom_target(utilities DEPENDS set-linkage)
@@ -84,4 +84,8 @@ install(PROGRAMS
    ${CMAKE_CURRENT_BINARY_DIR}/set-linkage
    ${CMAKE_CURRENT_SOURCE_DIR}/bin/bundle.sh
    ${CMAKE_CURRENT_SOURCE_DIR}/bin/unbundle.sh
+   ${CMAKE_CURRENT_SOURCE_DIR}/bin/cloc.sh
+   ${CMAKE_CURRENT_SOURCE_DIR}/bin/mymcpu
+   ${CMAKE_CURRENT_SOURCE_DIR}/bin/mygpu
    DESTINATION "bin")
+
