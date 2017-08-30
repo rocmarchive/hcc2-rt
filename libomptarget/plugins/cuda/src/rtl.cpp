@@ -622,21 +622,6 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 
   KernelTy *KernelInfo = (KernelTy *)tgt_entry_ptr;
 
-  void *Scratchpad = NULL;
-  size_t ScratchpadSize = KernelInfo->NumReductionVars == 0 ? 0 :
-      256 /*space for timestamp*/ + team_num * KernelInfo->ReductionVarsSize +
-      KernelInfo->NumReductionVars * /*padding=*/256;
-  if (ScratchpadSize > 0) {
-    Scratchpad = __tgt_rtl_data_alloc(device_id, ScratchpadSize, Scratchpad);
-#ifdef OMPTARGET_DEBUG
-    if (Scratchpad == NULL)
-      DP("Failed to allocate reduction scratchpad\n");
-#endif
-    unsigned timestamp = 0;
-    __tgt_rtl_data_submit(device_id, Scratchpad, &timestamp, sizeof(unsigned));
-  }
-  args[arg_num] = &Scratchpad;
-
   int cudaThreadsPerBlock;
 
   if (thread_limit > 0) {
@@ -712,6 +697,22 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     cudaBlocksPerGrid = team_num;
     DP("Using requested number of teams %d\n", team_num);
   }
+
+  void *Scratchpad = NULL;
+  size_t ScratchpadSize = KernelInfo->NumReductionVars == 0 ? 0 :
+      256 /*space for timestamp*/ +
+      cudaBlocksPerGrid * KernelInfo->ReductionVarsSize +
+      KernelInfo->NumReductionVars * /*padding=*/256;
+  if (ScratchpadSize > 0) {
+    Scratchpad = __tgt_rtl_data_alloc(device_id, ScratchpadSize, Scratchpad);
+#ifdef OMPTARGET_DEBUG
+    if (Scratchpad == NULL)
+      DP("Failed to allocate reduction scratchpad\n");
+#endif
+    unsigned timestamp = 0;
+    __tgt_rtl_data_submit(device_id, Scratchpad, &timestamp, sizeof(unsigned));
+  }
+  args[arg_num] = &Scratchpad;
 
   // Run on the device.
   DP("Launch kernel with %d blocks and %d threads\n", cudaBlocksPerGrid,
