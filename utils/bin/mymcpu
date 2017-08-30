@@ -104,6 +104,8 @@ function code2gpu(){
       ;;
       "fiji")    gpuname="gfx803"
       ;;
+      "vega")    gpuname="gfx900"
+      ;;
       "sm_30")   gpuname="sm_30"
       ;;
       "k4000")   gpuname="sm_30"
@@ -131,6 +133,8 @@ function gpu2code(){
       "gfx802") codename="tonga"
       ;;
       "gfx803") codename="fiji"
+      ;;
+      "gfx900") codename="vega"
       ;;
       "sm_50") codename="gtx980"
       ;;
@@ -164,6 +168,7 @@ if [ "$VENDOR" == "AMD" ] ; then
   if [ "$CPU" == "A10-7850K" ] || \
      [ "$CPU" == "A10-7870K" ] || \
      [ "$CPU" == "A10-7700K" ] || \
+x
      [ "$CPU" == "A6-7400K" ] || \
      [ "$CPU" == "A10 PRO-7350B" ] || \
      [ "$CPU" == "A10-7800K" ] ; then 
@@ -180,22 +185,30 @@ if [ "$VENDOR" == "AMD" ] ; then
 
 fi
 if [ "$thisname" == "" ] ; then
-   thisname=`lspci | grep -i -m1 Radeon | cut -d] -f2 | cut -d" " -f2 `
+   thisname=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/1/properties | grep device_id | cut -d" " -f2 | xargs printf "%x\n"`
+   if [ "$thisname" == "6863" ] ; then 
+      thisname="vega"
+   else 
+      if [ "$thisname" == "7300" ] ; then 
+         thisname="fiji"
+      fi
+   fi
    if [ "$thisname" == "" ] ; then
       thisname=`lspci | grep -i -m1 Firepro | cut -d] -f2 | cut -d" " -f2`
       if [ "$thisname" == "" ] ; then
-          thisname="sm_30"
-          lspci | grep -m1 -q GK106GL
-          if [ $? != 0 ] ; then 
+         thisname="sm_30"
+         lspci | grep -m1 -q GK106GL
+         if [ $? != 0 ] ; then 
              thisname="sm_50"
              lspci | grep -m1 NVIDIA | grep -q 13c0 
              if [ $? != 0 ] ; then 
                 thisname=""
              fi
-          fi
+         fi
       fi
    fi
 fi
+
 if [ "$thisname" != "" ] ; then
   lowercasevalue=`echo $thisname | tr '[:upper:]' '[:lower:]'`
 else 
