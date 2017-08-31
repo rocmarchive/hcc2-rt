@@ -1065,10 +1065,6 @@ static void RegisterGlobalCtorsDtorsForImage(__tgt_bin_desc *desc,
             DPxPTR(entry->addr));
         Device.PendingCtorsDtors[desc].PendingDtors.push_front(entry->addr);
       }
-
-      if (entry->flags & OMP_DECLARE_TARGET_LINK) {
-        DP("The \"link\" attribute is not yet supported!\n");
-      }
     }
     Device.PendingGlobalsMtx.unlock();
   }
