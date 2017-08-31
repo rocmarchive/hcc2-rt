@@ -49,11 +49,11 @@ INLINE unsigned n_sm() {
   return n_sm;
 }
 
-EXTERN void __kmpc_kernel_init_params(void *ReductionScratchpadPtr) {
+EXTERN void __kmpc_kernel_init_params(void *Ptr) {
   PRINT(LD_IO, "call to __kmpc_kernel_init_params with version %f\n",
         OMPTARGET_NVPTX_VERSION);
 
-  SetTeamsReductionScratchpadPtr(ReductionScratchpadPtr);
+  SetTeamsReductionScratchpadPtr(Ptr);
 }
 
 EXTERN void __kmpc_kernel_init(int ThreadLimit,
