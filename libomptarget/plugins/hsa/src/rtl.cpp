@@ -258,10 +258,13 @@ public:
     DP("Finalizing the HSA-ATMI DeviceInfo.\n");
     atmi_finalize();
 
+#if 0
     // Free devices allocated entry
     for(unsigned i=0; i<FuncGblEntries.size(); ++i ) {
       for(unsigned j=0; j<FuncGblEntries[i].Entries.size(); ++j ) {
         if(FuncGblEntries[i].Entries[j].addr) {
+          DP("Existing addr i:%d j:%d  addr:%p\n",i,j,(void*) FuncGblEntries[i].Entries[j].addr);
+          // It is not just the free that is broken, this addr cast also sometimes fails
           KernelTy *KernelInfo = (KernelTy *)FuncGblEntries[i].Entries[j].addr;
           if (KernelInfo->Func) {
             DP("Free address %016llx.\n",(long long unsigned)(Elf64_Addr)KernelInfo->Func);
@@ -270,6 +273,7 @@ public:
         }
       }
     }
+#endif
   }
 };
 
@@ -842,6 +846,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id,
     DP("Capping number of teams to team limit %d\n",
         DeviceInfo.GroupsPerDevice[device_id]);
   } else {
+    DP("The team limit is %d\n",
+        DeviceInfo.GroupsPerDevice[device_id]);
     num_groups = team_num;
     DP("Using requested number of teams %d\n", team_num);
   }
