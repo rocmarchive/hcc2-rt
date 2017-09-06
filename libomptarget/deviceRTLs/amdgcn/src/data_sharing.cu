@@ -13,6 +13,12 @@
 #include "omptarget-nvptx.h"
 #include <stdio.h>
 
+#define DSFLAG 1
+#define DSFLAG_INIT 1
+
+#define DSPRINT0 PRINT0
+#define DSPRINT  PRINT
+
 // Number of threads in the CUDA block.
 __device__ static unsigned getNumThreads() {
   return blockDim.x;
@@ -50,11 +56,11 @@ EXTERN int32_t __kmpc_warp_master_active_thread_id() {
   }
   Sh = Mask << Shnum;
   unsigned popret = __popcll(Sh);
-  PRINT(LD_IO,"__kmpc_warp_master_active_thread_id: tid=%d laneid=%d Shnum=%d RETURN VAL=%d\n", 
-   tid, laneid, Shnum, popret);
+  //PRINT(LD_IO,"__kmpc_warp_master_active_thread_id: tid=%d laneid=%d Shnum=%d RETURN VAL=%d\n", tid, laneid, Shnum, popret);
   return popret;
 #else
-  unsigned long long Mask = __ballot(true);
+  //unsigned long long Mask = __ballot(true);
+  unsigned long long Mask = __kmpc_warp_active_thread_mask();
   unsigned long long ShNum = 32 - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
   unsigned long long Sh = Mask << ShNum;
   return __popc(Sh);
@@ -83,6 +89,7 @@ __device__ static size_t AlignVal(size_t Val) {
   return Val;
 }
 
+#if 0
 // Turn on Datasharing debug with other debugging
 #if OMPTARGET_NVPTX_DEBUG
 #define DSFLAG 1
@@ -102,6 +109,7 @@ __device__ static size_t AlignVal(size_t Val) {
 #else 
 #define DSPRINT0(flag, str)
 #define DSPRINT(flag, str, _args...)
+#endif
 #endif
 
 // Initialize the shared data structures. This is expected to be called for the master thread and warp masters.

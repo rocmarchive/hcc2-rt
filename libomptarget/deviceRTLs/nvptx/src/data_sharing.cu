@@ -42,7 +42,8 @@ __device__ static unsigned getMasterThreadId() {
 }
 // The lowest ID among the active threads in the warp.
 __device__ static unsigned getWarpMasterActiveThreadId() {
-  unsigned long long Mask = __ballot(true);
+  //unsigned long long Mask = __ballot(true);
+  unsigned long long Mask = __kmpc_warp_active_thread_mask();
   unsigned long long ShNum = 32 - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
   unsigned long long Sh = Mask << ShNum;
   return __popc(Sh);
