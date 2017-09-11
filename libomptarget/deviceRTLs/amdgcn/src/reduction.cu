@@ -20,7 +20,7 @@
 // cannot implement atomic_start and atomic_end for GPU. Report runtime error
 EXTERN void __kmpc_atomic_start() {
   PRINT0(LD_TASK,"__kmpc_atomic_start not supported\n");
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   __device_trap();
 #else
  asm("trap;");
@@ -30,7 +30,7 @@ EXTERN void __kmpc_atomic_start() {
 
 EXTERN void __kmpc_atomic_end() {
   PRINT0(LD_TASK,"__kmpc_atomic_end not supported\n");
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   __device_trap();
 #else
  asm("trap;");
@@ -45,7 +45,7 @@ int32_t __gpu_block_reduce() {
   int nt = GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized());
   if (nt != blockDim.x)
     return 0;
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   unsigned long long tnum = __ballot64(1);
   if (tnum != 0xffffffffffffffff) {
 #else
@@ -319,7 +319,7 @@ INLINE __device__ void dc_div(double complex *lhs, double complex rhs) {
     return lhs;                                                                \
   }
 
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 #define TNUM unsigned long long tnum = __ballot64(1);
 #define FULL_WRAP_BITFIELDS 0xffffffffffffffff  // ~0x0ul
 #else
@@ -890,7 +890,7 @@ EXTERN int32_t __kmpc_shuffle_int32(int32_t val, int16_t delta, int16_t size) {
   return __shfl_down(val, delta, size);
 }
 
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 EXTERN int64_t __kmpc_shuffle_int64(int64_t val, int16_t delta, int16_t size) {
   int lo, hi;
   hi = (int)((val>>32) & 0xffffffff);
@@ -953,7 +953,7 @@ static INLINE void gpu_irregular_warp_reduce(void *reduce_data, kmp_ShuffleReduc
 }
 
 static INLINE uint32_t gpu_irregular_simd_reduce(void *reduce_data, kmp_ShuffleReductFctPtr shflFct) {
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   uint64_t lanemask_lt;
   uint64_t lanemask_gt;
 #else
@@ -962,25 +962,25 @@ static INLINE uint32_t gpu_irregular_simd_reduce(void *reduce_data, kmp_ShuffleR
 #endif
   uint32_t size, remote_id, physical_lane_id;
   physical_lane_id = GetThreadIdInBlock() % WARPSIZE;
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   lanemask_lt = __lanemask_lt();
 #else
   asm("mov.u32 %0, %%lanemask_lt;" : "=r"(lanemask_lt));
 #endif
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   uint64_t Liveness = __ballot64(true);
   uint32_t logical_lane_id = __popcll(Liveness & lanemask_lt) * 2;
 #else
   uint32_t Liveness = __ballot(true);
   uint32_t logical_lane_id = __popc(Liveness & lanemask_lt) * 2;
 #endif
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   lanemask_gt = __lanemask_gt();
 #else
   asm("mov.u32 %0, %%lanemask_gt;" : "=r"(lanemask_gt));
 #endif
   do {
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
     Liveness = __ballot64(true);
     remote_id = __ffsll(Liveness & lanemask_gt);
     size = __popcll(Liveness);
@@ -1046,7 +1046,7 @@ int32_t __kmpc_nvptx_simd_reduce_nowait(int32_t global_tid,
                                         void *reduce_data,
                                         kmp_ShuffleReductFctPtr shflFct,
                                         kmp_InterWarpCopyFctPtr cpyFct) {
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   uint64_t Liveness = __ballot64(true);
   if (Liveness == 0xffffffffffffffff) {
 #else
@@ -1077,7 +1077,7 @@ int32_t nvptx_parallel_reduce_nowait(int32_t global_tid, int32_t num_vars,
    * 3. Warp 0 reduces to a single value.
    * 4. The reduced value is available in the thread that returns 1.
    */
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   uint64_t Liveness = __ballot64(true);
   if (Liveness == 0xffffffffffffffff) // Full warp
     gpu_regular_warp_reduce(reduce_data, shflFct);
@@ -1213,7 +1213,7 @@ int32_t nvptx_teams_reduce_nowait(
     ldFct(reduce_data, scratchpad, i, NumTeams, /*Load and reduce*/1);
 
   // Reduce across warps to the warp master.
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   uint64_t Liveness = __ballot64(true);
   if (Liveness == 0xffffffffffffffff) // Full warp
     gpu_regular_warp_reduce(reduce_data, shflFct);

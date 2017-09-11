@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 // function defined in cuda header
 EXTERN void __device_trap();
 
@@ -37,7 +37,7 @@ EXTERN void* __malloc(size_t);
 EXTERN void __free(void*);
 #endif
 
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 #ifdef clock
 #undef clock
 #endif

@@ -47,7 +47,7 @@ typedef struct ConvergentSimdJob {
 EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, bool *IsFinal, int32_t *LaneSource,
                                           int32_t *LaneId, int32_t *NumLanes) {
   PRINT0(LD_IO, "call to __kmpc_kernel_convergent_simd\n");
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   uint64_t ConvergentMask = __ballot64(true);
   int32_t  ConvergentSize = __popcll(ConvergentMask);
   uint64_t WorkRemaining  = ConvergentMask >> (*LaneSource+1);
@@ -62,7 +62,7 @@ EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, bool *IsFinal, int32_t *
   *IsFinal = __popc(WorkRemaining) == 1;
   uint32_t lanemask_lt;
 #endif
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   lanemask_lt = __lanemask_lt();
   *LaneId = __popcll(ConvergentMask & lanemask_lt);
 #else
@@ -133,7 +133,7 @@ typedef struct ConvergentParallelJob {
 ////////////////////////////////////////////////////////////////////////////////
 EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, bool *IsFinal, int32_t *LaneSource) {
   PRINT0(LD_IO, "call to __kmpc_kernel_convergent_parallel\n");
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   uint64_t ConvergentMask = __ballot64(true);
   int32_t  ConvergentSize = __popcll(ConvergentMask);
   uint64_t WorkRemaining  = ConvergentMask >> (*LaneSource+1);
@@ -148,7 +148,7 @@ EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, bool *IsFinal, int32
   *IsFinal = __popc(WorkRemaining) == 1;
   uint32_t lanemask_lt;
 #endif
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   lanemask_lt = __lanemask_lt();
   uint32_t OmpId = __popcll(ConvergentMask & lanemask_lt);
 #else

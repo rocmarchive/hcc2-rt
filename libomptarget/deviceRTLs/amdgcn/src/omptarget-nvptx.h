@@ -48,7 +48,7 @@
 // Data sharing related quantities, need to match what is used in the compiler.
 enum DATA_SHARING_SIZES {
   // The maximum number of workers in a kernel.
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   // (THREAD_ABSOLUTE_LIMIT) - (DS_Max_Worker_Warp_Size), might be issue for blockDim.z
   DS_Max_Worker_Threads = 960,
 #else
@@ -57,14 +57,14 @@ enum DATA_SHARING_SIZES {
   // The size reserved for data in a shared memory slot.
   DS_Slot_Size = 256,
   // The maximum number of threads in a worker warp.
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   DS_Max_Worker_Warp_Size = 64,
 #else
   DS_Max_Worker_Warp_Size = 32,
 #endif
   // The number of bits required to represent the maximum number of threads in a
   // warp.
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   DS_Max_Worker_Warp_Size_Log2 = 6,
   // DS_Max_Worker_Warp_Size_Log2_Mask = (~0u >> (64-DS_Max_Worker_Warp_Size_Log2)),
   DS_Max_Worker_Warp_Size_Log2_Mask = 63, 
@@ -75,7 +75,7 @@ enum DATA_SHARING_SIZES {
   // The slot size that should be reserved for a working warp.
   DS_Worker_Warp_Slot_Size = DS_Max_Worker_Warp_Size * DS_Slot_Size,
   // The maximum number of warps in use
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   DS_Max_Warp_Number = 16,  // WAVE_ID bit 0:3, also = MAX_NUM_WARPS
 #else
   DS_Max_Warp_Number = 32,
@@ -87,7 +87,7 @@ struct DataSharingStateTy {
   __kmpc_data_sharing_slot *SlotPtr[DS_Max_Warp_Number];
   void *StackPtr[DS_Max_Warp_Number];
   void *FramePtr[DS_Max_Warp_Number];
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   int64_t ActiveThreads[DS_Max_Warp_Number];
 #else
   int32_t ActiveThreads[DS_Max_Warp_Number];

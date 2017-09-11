@@ -30,7 +30,7 @@
 // max number of blocks depend on the kernel we are executing - pick default
 // here
 #define MAX_NUM_TEAMS TEAMS_ABSOLUTE_LIMIT
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 #define WARPSIZE 64
 #define warpSize WARPSIZE
 #else
@@ -53,7 +53,7 @@
 #define L1_BARRIER (1)
 
 // Maximum number of omp state objects per SM allocated statically in global memory.
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 #define OMP_STATE_COUNT 16
 #define MAX_SM 64
 #else

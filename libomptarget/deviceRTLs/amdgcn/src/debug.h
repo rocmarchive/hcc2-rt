@@ -29,7 +29,7 @@
 #ifndef _OMPTARGET_NVPTX_DEBUG_H_
 #define _OMPTARGET_NVPTX_DEBUG_H_
 
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 #define LANEMASK 0x3F
 #else
 #define LANEMASK 0x1F
@@ -203,7 +203,7 @@
 #define LT_INPUT (LT_SET_INPUT | LT_SET_FUSSY)
 #define LT_FUSSY (LT_SET_FUSSY)
 
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 
 #define TON(_flag) (FALSE)
 #define ASSERT0(_flag, _cond, _str)

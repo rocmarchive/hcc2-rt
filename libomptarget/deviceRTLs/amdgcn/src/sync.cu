@@ -133,7 +133,7 @@ EXTERN int32_t __kmpc_warp_active_thread_mask() {
   PRINT0(LD_IO, "call __kmpc_warp_active_thread_mask\n");
   return __ballot(true);
 }
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 EXTERN int64_t __kmpc_warp_active_thread_mask64() {
   PRINT0(LD_IO, "call __kmpc_warp_active_thread_mask\n");
   return __ballot64(true);

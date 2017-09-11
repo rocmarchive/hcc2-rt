@@ -391,7 +391,7 @@ EXTERN void __kmpc_flush(kmp_Indent *loc);
 // vote
 EXTERN int32_t __kmpc_warp_active_thread_mask();
 EXTERN int32_t __kmpc_warp_master_active_thread_id();
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 EXTERN int64_t __kmpc_warp_active_thread_mask64();
 #endif
 
@@ -1287,7 +1287,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
     __kmpc_data_sharing_slot **SavedSharedSlot,
     void **SavedSharedStack,
     void **SavedSharedFrame,
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
     int64_t *SavedActiveThreads,
 #else
     int32_t *SavedActiveThreads,

@@ -14,7 +14,7 @@
 #include "omptarget-nvptx.h"
 #include <stdio.h>
 
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 
 #define NUM_PAGES_PER_THREAD  16
 #define SIZE_OF_PAGE          64

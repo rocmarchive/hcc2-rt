@@ -17,7 +17,7 @@
 // init entry points
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 INLINE unsigned smid() {
   // return __smid();
   // For amdgcn, use a virtual smid based on global thread number

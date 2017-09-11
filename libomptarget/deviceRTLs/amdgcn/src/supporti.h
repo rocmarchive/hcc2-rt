@@ -221,7 +221,7 @@ INLINE void *SafeFree(void *ptr, const char *msg) {
 // Named Barrier Routines
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
 INLINE void named_sync(const int barrier, const int num_threads) {
   __named_sync(barrier, num_threads);
 }

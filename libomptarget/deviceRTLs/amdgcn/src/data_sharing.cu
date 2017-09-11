@@ -42,7 +42,7 @@ __device__ static unsigned getMasterThreadId() {
 }
 // The lowest ID among the active threads in the warp.
 EXTERN int32_t __kmpc_warp_master_active_thread_id() {
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   int64_t Mask = __kmpc_warp_active_thread_mask64();
   unsigned tid  = threadIdx.x;
   unsigned laneid = (tid & 0X3F);
@@ -150,7 +150,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
     __kmpc_data_sharing_slot **SavedSharedSlot,
     void **SavedSharedStack,
     void **SavedSharedFrame,
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
     int64_t *SavedActiveThreads,
 #else
     int32_t *SavedActiveThreads,
@@ -170,7 +170,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
   DSPRINT(DSFLAG,"Default Data Size %016lx\n", SharingDefaultDataSize);
 
   unsigned WID = getWarpId();
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   unsigned long long CurActiveThreads = __ballot64(true);
 #else
   unsigned CurActiveThreads = __ballot(true);
@@ -179,7 +179,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
   __kmpc_data_sharing_slot *&SlotP = DataSharingState.SlotPtr[WID];
   void *&StackP = DataSharingState.StackPtr[WID];
   void *&FrameP = DataSharingState.FramePtr[WID];
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   int64_t &ActiveT = DataSharingState.ActiveThreads[WID];
 #else
   int32_t &ActiveT = DataSharingState.ActiveThreads[WID];
@@ -196,7 +196,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
   DSPRINT(DSFLAG,"Saved slot ptr at: %016llx \n", (long long)SlotP);
   DSPRINT(DSFLAG,"Saved stack ptr at: %016llx \n", (long long)StackP);
   DSPRINT(DSFLAG,"Saved frame ptr at: %016llx \n", (long long)FrameP);
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   DSPRINT(DSFLAG,"Active threads: %08lx \n", ActiveT);
 #else
   DSPRINT(DSFLAG,"Active threads: %08x \n", ActiveT);
@@ -222,7 +222,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
     DSPRINT(DSFLAG,"Current Start Address %016lx\n", CurrentStartAddress);
     DSPRINT(DSFLAG,"Current End Address %016lx\n", CurrentEndAddress);
     DSPRINT(DSFLAG,"Required End Address %016lx\n", RequiredEndAddress);
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
     DSPRINT(DSFLAG,"Active Threads %08lx \n", ActiveT);
 #else
     DSPRINT(DSFLAG,"Active Threads %08x \n", ActiveT);
@@ -284,7 +284,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
     __kmpc_data_sharing_slot **SavedSharedSlot,
     void **SavedSharedStack,
     void **SavedSharedFrame,
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
     int64_t *SavedActiveThreads,
 #else
     int32_t *SavedActiveThreads,
@@ -312,7 +312,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
     DSPRINT0(DSFLAG,"Exiting Exiting __kmpc_data_sharing_environment_end\n");
     return;
   }
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
   int64_t CurActive = __ballot64(true);
 #else
   int32_t CurActive = __ballot(true);
@@ -320,7 +320,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
 
   // Only the warp master can restore the stack and frame information, and only if there are no other threads left behind in this environment (i.e. the warp diverged and returns in different places). This only works if we assume that threads will converge right after the call site that started the environment.
   if (IsWarpMasterActiveThread()) {
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
     int64_t &ActiveT = DataSharingState.ActiveThreads[WID];
 #else
     int32_t &ActiveT = DataSharingState.ActiveThreads[WID];
@@ -329,7 +329,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
     DSPRINT0(DSFLAG,"Before restoring the stack\n");
     // Zero the bits in the mask. If it is still different from zero, then we have other threads that will return after the current ones.
     ActiveT &= ~CurActive;
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
     DSPRINT(DSFLAG,"Active threads: %08lx; New mask: %08lx \n", CurActive, ActiveT);
 #else
     DSPRINT(DSFLAG,"Active threads: %08x; New mask: %08x\n", CurActive, ActiveT);
@@ -350,7 +350,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
       DSPRINT(DSFLAG,"Restored slot ptr at: %016llx \n",(long long)SlotP);
       DSPRINT(DSFLAG,"Restored stack ptr at: %016llx \n",(long long)StackP);
       DSPRINT(DSFLAG,"Restored frame ptr at: %016llx \n", (long long)FrameP);
-#ifdef GPUCC_AMDGCN
+#ifdef __AMDGCN__
       DSPRINT(DSFLAG,"Active threads: %08lx \n", ActiveT);
 #else
       DSPRINT(DSFLAG,"Active threads: %08x \n", ActiveT);
