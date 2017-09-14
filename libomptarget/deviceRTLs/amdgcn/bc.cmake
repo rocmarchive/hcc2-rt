@@ -149,7 +149,7 @@ endmacro()
 macro(add_bc_library name dir)
   set(bc_files)
 
-  collect_sources(${name} ${dir} ${sources})
+  collect_sources(${name} ${dir} ${ARGN})
 
   if (llvm_sources)
     add_llvm_bc_library(${name} ${dir} ${llvm_sources})
