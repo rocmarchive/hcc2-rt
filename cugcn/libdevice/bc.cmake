@@ -119,8 +119,8 @@ macro(add_cuda_bc_library name dir)
     -S -emit-llvm
     --cuda-device-only
     -nocudalib
-    -DGPUCC_AMDGCN
     --cuda-gpu-arch=${mcpu}
+    ${CUDA_DEBUG}
     -I${CMAKE_CURRENT_SOURCE_DIR}/src)
 
   set(ll_files)

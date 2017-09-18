@@ -111,7 +111,6 @@ macro(add_cuda_bc_library name dir)
     --cuda-device-only
     -nocudalib
     -O${optimization_level}
-    -DGPUCC_AMDGCN
     --cuda-gpu-arch=${mcpu}
     ${CUDA_DEBUG}
     -I${CMAKE_CURRENT_SOURCE_DIR}/src)
