@@ -43,8 +43,12 @@ libomptarget_say("Building AMDGCN device RTL. LLVM_COMPILER_PATH=${HCC2_BINDIR} 
 #   (2) Sync coral-clang with HCC2 clang and support CUDA 8.0
 #
 
+###############################################################################
+# Main project
+###############################################################################
 
 project(omptarget-amdgcn)
+
 add_custom_target(omptarget-amdgcn ALL)
 
 add_dependencies(omptarget-amdgcn utilities)
@@ -75,7 +79,14 @@ else()
 endif()
 
 # create libraries
-foreach(mcpu ${amdgcn_mcpus})
+set(mcpus $ENV{GFXLIST})
+
+if(mcpus)
+else()
+  set(mcpus ${amdgcn_mcpus})
+endif()
+
+foreach(mcpu ${mcpus})
   add_bc_library(omptarget-amdgcn ${CMAKE_CURRENT_SOURCE_DIR} ${sources})
 
   if(CMAKE_BUILD_TYPE MATCHES Debug)

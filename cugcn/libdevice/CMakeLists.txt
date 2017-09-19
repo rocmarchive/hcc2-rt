@@ -161,7 +161,14 @@ file(GLOB sources
   ${CMAKE_CURRENT_SOURCE_DIR}/src/*.ll)
 
 # create libraries
-foreach(mcpu ${amdgcn_mcpus})
+set(mcpus $ENV{GFXLIST})
+
+if(mcpus)
+else()
+  set(mcpus ${amdgcn_mcpus})
+endif()
+
+foreach(mcpu ${mcpus})
   set(final_bc_filename libicuda2gcn-${mcpu}.bc)
 
   add_bc_library(icuda2gcn ${CMAKE_CURRENT_SOURCE_DIR} ${sources})
