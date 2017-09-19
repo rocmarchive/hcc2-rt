@@ -186,11 +186,20 @@ macro(add_bc_library name dir)
     COMMAND ${HCC2_BINDIR}/opt -O${optimization_level} linkout.${mcpu}.bc -o optout.${mcpu}.bc
     DEPENDS linkout.${mcpu}.bc
     )
-  add_custom_command(
-    OUTPUT lib${name}-${mcpu}.bc
-    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/../../utils/set-linkage optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
-    DEPENDS optout.${mcpu}.bc utilities
-    )
+
+  if (EXISTS "${HCC2_BINDIR}/set-linkage")
+    add_custom_command(
+      OUTPUT lib${name}-${mcpu}.bc
+      COMMAND ${HCC2_BINDIR}/set-linkage optout.${mcpu}.bc -o ${OUTPUTDIR}/lib${name}-${mcpu}.bc
+      DEPENDS optout.${mcpu}.bc #utilities
+      )
+  else ()
+    add_custom_command(
+      OUTPUT lib${name}-${mcpu}.bc
+      COMMAND /bin/cp optout.${mcpu}.bc ${OUTPUTDIR}/lib${name}-${mcpu}.bc
+      DEPENDS optout.${mcpu}.bc
+      )
+  endif()
 
   add_custom_target(lib${name}-${mcpu} ALL DEPENDS lib${name}-${mcpu}.bc)
 endmacro()
