@@ -36,7 +36,7 @@ __device__ static unsigned getMasterThreadId() {
 }
 // The lowest ID among the active threads in the warp.
 __device__ static unsigned getWarpMasterActiveThreadId() {
-  unsigned long long Mask = __ballot(true);
+  unsigned long long Mask = __BALLOT_SYNC(0xFFFFFFFF, true);
   unsigned long long ShNum = 32 - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
   unsigned long long Sh = Mask << ShNum;
   return __popc(Sh);
@@ -129,7 +129,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
   DSPRINT(DSFLAG,"Default Data Size %016llx\n", SharingDefaultDataSize);
 
   unsigned WID = getWarpId();
-  unsigned CurActiveThreads = __ballot(true);
+  unsigned CurActiveThreads = __BALLOT_SYNC(0xFFFFFFFF, true);
 
   __kmpc_data_sharing_slot *&SlotP = DataSharingState.SlotPtr[WID];
   void *&StackP = DataSharingState.StackPtr[WID];
@@ -252,7 +252,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
     return;
   }
 
-  int32_t CurActive = __ballot(true);
+  int32_t CurActive = __BALLOT_SYNC(0xFFFFFFFF, true);
 
   // Only the warp master can restore the stack and frame information, and only if there are no other threads left behind in this environment (i.e. the warp diverged and returns in different places). This only works if we assume that threads will converge right after the call site that started the environment.
   if (IsWarpMasterActiveThread()) {

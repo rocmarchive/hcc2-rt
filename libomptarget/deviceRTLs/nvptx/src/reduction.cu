@@ -37,7 +37,7 @@ int32_t __gpu_block_reduce() {
   int nt = GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized());
   if (nt != blockDim.x)
     return 0;
-  unsigned tnum = __ballot(1);
+  unsigned tnum = __ACTIVEMASK();
   if (tnum != (~0x0)) { // assume swapSize is 32
     return 0;
   }
@@ -313,7 +313,7 @@ INLINE __device__ void dc_div(double complex *lhs, double complex rhs) {
                                           double _Complex *lhs,                \
                                           double _Complex rhs) {               \
     __shared__ unsigned int stepinblock;                                       \
-    unsigned tnum = __ballot(1);                                               \
+    unsigned tnum = __ACTIVEMASK();                                               \
     if (tnum != (~0x0)) {                                                      \
       return;                                                                  \
     }                                                                          \
@@ -867,14 +867,14 @@ ATOMIC_GENOP_ALL4(ATOMIC_GENOP_PARTIAL, fixed2u, uint16_t, int32_t);
 ATOMIC_GENOP_ALL4(ATOMIC_GENOP_PARTIAL, fixed2, int16_t, int32_t);
 
 EXTERN int32_t __kmpc_shuffle_int32(int32_t val, int16_t delta, int16_t size) {
-  return __shfl_down(val, delta, size);
+  return __SHFL_DOWN_SYNC(0xFFFFFFFF, val, delta, size);
 }
 
 EXTERN int64_t __kmpc_shuffle_int64(int64_t val, int16_t delta, int16_t size) {
   int lo, hi;
   asm volatile("mov.b64 {%0,%1}, %2;" : "=r"(lo), "=r"(hi) : "l"(val));
-  hi = __shfl_down(hi, delta, size);
-  lo = __shfl_down(lo, delta, size);
+  hi = __SHFL_DOWN_SYNC(0xFFFFFFFF, hi, delta, size);
+  lo = __SHFL_DOWN_SYNC(0xFFFFFFFF, lo, delta, size);
   asm volatile("mov.b64 %0, {%1,%2};" : "=l"(val) : "r"(lo), "r"(hi));
   return val;
 }
@@ -924,11 +924,11 @@ static INLINE uint32_t gpu_irregular_simd_reduce(void *reduce_data, kmp_ShuffleR
   uint32_t size, remote_id, physical_lane_id;
   physical_lane_id = GetThreadIdInBlock() % WARPSIZE;
   asm("mov.u32 %0, %%lanemask_lt;" : "=r"(lanemask_lt));
-  uint32_t Liveness = __ballot(true);
+  uint32_t Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
   uint32_t logical_lane_id = __popc(Liveness & lanemask_lt) * 2;
   asm("mov.u32 %0, %%lanemask_gt;" : "=r"(lanemask_gt));
   do {
-    Liveness = __ballot(true);
+    Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
     remote_id = __ffs(Liveness & lanemask_gt);
     size = __popc(Liveness);
     logical_lane_id /= 2;
@@ -988,7 +988,7 @@ int32_t __kmpc_nvptx_simd_reduce_nowait(int32_t global_tid,
                                         void *reduce_data,
                                         kmp_ShuffleReductFctPtr shflFct,
                                         kmp_InterWarpCopyFctPtr cpyFct) {
-  uint32_t Liveness = __ballot(true);
+  uint32_t Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
   if (Liveness == 0xffffffff) {
     gpu_regular_warp_reduce(reduce_data, shflFct);
     return GetThreadIdInBlock() % WARPSIZE == 0; // Result on lane 0 of the simd warp.
@@ -1014,7 +1014,7 @@ int32_t nvptx_parallel_reduce_nowait(int32_t global_tid, int32_t num_vars,
    * 3. Warp 0 reduces to a single value.
    * 4. The reduced value is available in the thread that returns 1.
    */
-  uint32_t Liveness = __ballot(true);
+  uint32_t Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
   if (Liveness == 0xffffffff) // Full warp
     gpu_regular_warp_reduce(reduce_data, shflFct);
   else if (!(Liveness & (Liveness + 1))) // Partial warp but contiguous lanes
@@ -1139,7 +1139,7 @@ int32_t nvptx_teams_reduce_nowait(
     ldFct(reduce_data, scratchpad, i, NumTeams, /*Load and reduce*/1);
 
   // Reduce across warps to the warp master.
-  uint32_t Liveness = __ballot(true);
+  uint32_t Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
   if (Liveness == 0xffffffff) // Full warp
     gpu_regular_warp_reduce(reduce_data, shflFct);
   else // Partial warp but contiguous lanes

@@ -44,6 +44,22 @@
 #define BARRIER_COUNTER 0
 #define ORDERED_COUNTER 1
 
+// Macros for Cuda intrinsics
+// In Cuda 9.0, the *_sync() version takes an extra argument 'mask'.
+// Also, __ballot(1) in Cuda 8.0 is replaced with __activemask().
+#if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
+#define __SHFL_SYNC(mask, var, srcLane) __shfl_sync((mask), (var), (srcLane))
+#define __SHFL_DOWN_SYNC(mask, var, delta, width) \
+                        __shfl_down_sync((mask), (var), (delta), (width))
+#define __BALLOT_SYNC(mask, predicate) __ballot_sync((mask), (predicate))
+#define __ACTIVEMASK() __activemask()
+#else
+#define __SHFL_SYNC((mask, var, srcLane) __shfl((var), (srcLane))
+#define __SHFL_DOWN_SYNC(mask, var, delta, width) __shfl_down((var), (delta), (width))
+#define __BALLOT_SYNC(mask, predicate) __ballot((predicate))
+#define __ACTIVEMASK() __ballot(1)
+#endif
+
 // Data sharing related quantities, need to match what is used in the compiler.
 enum DATA_SHARING_SIZES {
   // The maximum number of workers in a kernel.
