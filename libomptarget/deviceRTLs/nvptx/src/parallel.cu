@@ -47,7 +47,7 @@ typedef struct ConvergentSimdJob {
 EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, bool *IsFinal, int32_t *LaneSource,
                                           int32_t *LaneId, int32_t *NumLanes) {
   PRINT0(LD_IO, "call to __kmpc_kernel_convergent_simd\n");
-  uint32_t ConvergentMask = __ballot(true);
+  uint32_t ConvergentMask = __BALLOT_SYNC(0xFFFFFFFF, true);
   int32_t  ConvergentSize = __popc(ConvergentMask);
   uint32_t WorkRemaining  = ConvergentMask >> (*LaneSource+1);
   *LaneSource += __ffs(WorkRemaining);
@@ -64,7 +64,7 @@ EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, bool *IsFinal, int32_t *
     omptarget_nvptx_threadPrivateContext->SimdLimitForNextSimd(threadId);
   job->slimForNextSimd = SimdLimit;
 
-  int32_t SimdLimitSource = __shfl(SimdLimit, *LaneSource);
+  int32_t SimdLimitSource = __SHFL_SYNC(0xFFFFFFFF, SimdLimit, *LaneSource);
   // reset simdlimit to avoid propagating to successive #simd
   if (SimdLimitSource > 0 && threadId == sourceThreadId)
     omptarget_nvptx_threadPrivateContext->SimdLimitForNextSimd(
@@ -119,7 +119,7 @@ typedef struct ConvergentParallelJob {
 ////////////////////////////////////////////////////////////////////////////////
 EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, bool *IsFinal, int32_t *LaneSource) {
   PRINT0(LD_IO, "call to __kmpc_kernel_convergent_parallel\n");
-  uint32_t ConvergentMask = __ballot(true);
+  uint32_t ConvergentMask = __BALLOT_SYNC(0xFFFFFFFF, true);
   int32_t  ConvergentSize = __popc(ConvergentMask);
   uint32_t WorkRemaining  = ConvergentMask >> (*LaneSource+1);
   *LaneSource += __ffs(WorkRemaining);
@@ -136,7 +136,7 @@ EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, bool *IsFinal, int32
     omptarget_nvptx_threadPrivateContext->NumThreadsForNextParallel(threadId);
   job->tnumForNextPar = NumThreadsClause;
 
-  int32_t NumThreadsSource = __shfl(NumThreadsClause, *LaneSource);
+  int32_t NumThreadsSource = __SHFL_SYNC(0xFFFFFFFF, NumThreadsClause, *LaneSource);
   // reset numthreads to avoid propagating to successive #parallel
   if (NumThreadsSource > 0 && threadId == sourceThreadId)
     omptarget_nvptx_threadPrivateContext->NumThreadsForNextParallel(

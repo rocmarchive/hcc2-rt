@@ -132,5 +132,5 @@ EXTERN void __kmpc_flush(kmp_Indent *loc) {
 
 EXTERN int32_t __kmpc_warp_active_thread_mask() {
   PRINT0(LD_IO, "call __kmpc_warp_active_thread_mask\n");
-  return __ballot(true);
+  return __BALLOT_SYNC(0xFFFFFFFF, true);
 }
