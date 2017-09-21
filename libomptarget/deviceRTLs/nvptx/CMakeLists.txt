@@ -166,6 +166,13 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
           -DOMPTARGET_NVPTX_TEST=0 -DOMPTARGET_NVPTX_DEBUG=0
       )
 
+      # CUDA 9 header files use the nv_weak attribute which clang is not yet prepared
+      # to handle. Therefore, we use 'weak' instead. We are compiling only for the
+      # device, so it should be equivalent.
+      if(CUDA_VERSION_MAJOR EQUAL 9)
+        set(CUDA_FLAGS ${CUDA_FLAGS} -Dnv_weak=weak)
+      endif()
+
       # This is currently broken
       set(CUDA_INCLUDES -I/usr/include/powerpc64le-linux-gnu)
 
