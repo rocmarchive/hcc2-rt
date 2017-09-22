@@ -152,6 +152,7 @@ EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit,
   ASSERT0(LT_FUSSY, newTaskDescr, "expected a task descr");
   newTaskDescr->InitLevelOneTaskDescr(
     ThreadLimit, currTeamDescr.LevelZeroTaskDescr());
+  newTaskDescr->ThreadLimit() = ThreadLimit;
   // install new top descriptor
   omptarget_nvptx_threadPrivateContext->SetTopLevelTaskDescr(threadId,
                                                              newTaskDescr);
