@@ -54,7 +54,7 @@
 #define __BALLOT_SYNC(mask, predicate) __ballot_sync((mask), (predicate))
 #define __ACTIVEMASK() __activemask()
 #else
-#define __SHFL_SYNC((mask, var, srcLane) __shfl((var), (srcLane))
+#define __SHFL_SYNC(mask, var, srcLane) __shfl((var), (srcLane))
 #define __SHFL_DOWN_SYNC(mask, var, delta, width) __shfl_down((var), (delta), (width))
 #define __BALLOT_SYNC(mask, predicate) __ballot((predicate))
 #define __ACTIVEMASK() __ballot(1)
