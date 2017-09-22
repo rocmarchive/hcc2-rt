@@ -199,9 +199,6 @@ public:
 
   INLINE static void dispatch_init(kmp_sched_t schedule, T lb, T ub, ST st,
                                    ST chunk) {
-    ASSERT0(LT_FUSSY, lb == 0, "exected normalized loop");
-    lb = 0;
-
     int tid = GetLogicalThreadIdInBlock();
     omptarget_nvptx_TaskDescr *currTaskDescr = getMyTopTaskDescriptor(tid);
     T tnum = currTaskDescr->ThreadsInTeam();
@@ -211,6 +208,16 @@ public:
         GetOmpThreadId(tid, isSPMDMode(), isRuntimeUninitialized()) <
             GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized()),
         "current thread is not needed here; error");
+
+    /* Currently just ignore the monotonic and non-monotonic modifiers
+     * (the compiler isn't producing them * yet anyway).
+     * When it is we'll want to look at them somewhere here and use that
+     * information to add to our schedule choice. We shouldn't need to pass
+     * them on, they merely affect which schedule we can legally choose for
+     * various dynamic cases. (In paritcular, whether or not a stealing scheme
+     * is legal).
+     */
+    schedule = SCHEDULE_WITHOUT_MODIFIERS(schedule);
 
     // Process schedule.
     if (tnum == 1 || tripCount <= 1 || OrderedSchedule(schedule)) {
