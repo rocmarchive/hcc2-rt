@@ -1,6 +1,6 @@
 include ../Makefile.defs
 
-EXTRAFLAGS := -O3 --cuda-noopt-device-debug
+EXTRAFLAGS := -O3
 
 ################################################################################
 #
