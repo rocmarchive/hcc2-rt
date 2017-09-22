@@ -199,9 +199,6 @@ public:
 
   INLINE static void dispatch_init(kmp_sched_t schedule, T lb, T ub, ST st,
                                    ST chunk) {
-    ASSERT0(LT_FUSSY, lb == 0, "exected normalized loop");
-    lb = 0;
-
     int tid = GetLogicalThreadIdInBlock();
     omptarget_nvptx_TaskDescr *currTaskDescr = getMyTopTaskDescriptor(tid);
     T tnum = currTaskDescr->ThreadsInTeam();
