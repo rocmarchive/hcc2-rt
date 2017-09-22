@@ -212,6 +212,16 @@ public:
             GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized()),
         "current thread is not needed here; error");
 
+    /* Currently just ignore the monotonic and non-monotonic modifiers
+     * (the compiler isn't producing them * yet anyway).
+     * When it is we'll want to look at them somewhere here and use that
+     * information to add to our schedule choice. We shouldn't need to pass
+     * them on, they merely affect which schedule we can legally choose for
+     * various dynamic cases. (In paritcular, whether or not a stealing scheme
+     * is legal).
+     */
+    schedule = SCHEDULE_WITHOUT_MODIFIERS(schedule);
+
     // Process schedule.
     if (tnum == 1 || tripCount <= 1 || OrderedSchedule(schedule)) {
       PRINT(LD_LOOP,
