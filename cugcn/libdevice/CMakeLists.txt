@@ -138,8 +138,6 @@ project(icuda2gcn)
 
 add_custom_target(icuda2gcn ALL)
 
-add_dependencies(icuda2gcn utilities)
-
 ###############################################################################
 # Create bc library from different sources
 ###############################################################################

@@ -51,8 +51,6 @@ project(omptarget-amdgcn)
 
 add_custom_target(omptarget-amdgcn ALL)
 
-add_dependencies(omptarget-amdgcn utilities)
-
 ###############################################################################
 # Create bc library from different sources
 ###############################################################################

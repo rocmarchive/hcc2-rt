@@ -61,28 +61,9 @@ message("Building omprt utils using ${HCC2_BINDIR}/clang++ ")
 project(omprt-utils)
 add_custom_target(omprt-utils ALL)
 
-#For older verson of LLVM
-#if (EXISTS ${HCC2_INCDIR}/llvm/Bitcode/ReaderWriter.h)
-#  set (RW_HEADER -DRW_HEADER)
-
-add_custom_command(
-  OUTPUT set-linkage.o
-  COMMAND ${HCC2_BINDIR}/clang++ -pthread -I${HCC2_INCDIR} -I${HCC2_MAIN_INCDIR} ${RW_HEADER} -fPIC -fvisibility-inlines-hidden -Wall -W -Wno-unused-parameter -Wwrite-strings -Wcast-qual -Wno-missing-field-initializers -pedantic -Wno-long-long -Wno-uninitialized -Wdelete-non-virtual-dtor -Wno-comment -std=c++11 -ffunction-sections -fdata-sections   -fno-exceptions -fno-rtti -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -fno-exceptions -fno-rtti -c -o set-linkage.o ${CMAKE_CURRENT_SOURCE_DIR}/src/set-linkage.cpp
-  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/set-linkage.cpp"
-  )
-
-add_custom_command(
-  OUTPUT set-linkage
-  COMMAND ${HCC2_BINDIR}/clang++ -pthread -o set-linkage set-linkage.o ${HCC2_LIBS} -ltinfo -L${HCC2_LIBDIR} -Wl,-rpath ${HCC2_LIBDIR} -ldl
-  DEPENDS set-linkage.o
-  )
-
-add_custom_target(utilities DEPENDS set-linkage)
-
 # We want set-linkage in the distribution for library builders to use
 # Also install shell utilities that are nice to have for debugging
 install(PROGRAMS
-   ${CMAKE_CURRENT_BINARY_DIR}/set-linkage
    ${CMAKE_CURRENT_SOURCE_DIR}/bin/bundle.sh
    ${CMAKE_CURRENT_SOURCE_DIR}/bin/unbundle.sh
    ${CMAKE_CURRENT_SOURCE_DIR}/bin/cloc.sh
