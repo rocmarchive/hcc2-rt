@@ -32,7 +32,6 @@ find_path (
     /usr/local/include
     /opt/local/include
     /sw/include
-    /home/compteam/local/include
     ENV CPATH
   PATH_SUFFIXES
     libelf)
@@ -79,7 +78,6 @@ find_path (
     /usr/local/include
     /opt/local/include
     /sw/include
-    /home/compteam/local/lib/libffi-3.2.1/include
     ENV CPATH)
 
 # Don't bother look for the library if the header files were not found.
