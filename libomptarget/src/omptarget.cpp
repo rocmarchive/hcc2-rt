@@ -43,7 +43,7 @@ static const char *RTLNames[] = {
 static const char *RTLQuickCheckFiles[] = {
     /* devicedtree is unique to ppc         */ "/sys/firmware/devicetree",
     /* acpiis unique to x86                 */ "/sys/firmware/acpi",
-    /* nvidia-uvm is unique to CUDA target  */ "/dev/nvidia-uvm",
+    /* nvidia0 is unique to CUDA target     */ "/dev/nvidia0",
     /* kfd device is unique to HSA          */ "/dev/kfd",
     /* FIXME find file unique to arm */  "/sys/NEED_UNIQUE_ARM_FILE_FOR_QUICK_TEST"
 };
