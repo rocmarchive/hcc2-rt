@@ -23,6 +23,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <sys/stat.h>
 
 // Header file global to this project
 #include "omptarget.h"
@@ -48,7 +49,16 @@ static const char *RTLNames[] = {
     /* PowerPC target */ "libomptarget.rtl.ppc64.so",
     /* x86_64 target  */ "libomptarget.rtl.x86_64.so",
     /* CUDA target    */ "libomptarget.rtl.cuda.so",
+    /* HSA target     */ "libomptarget.rtl.hsa.so",
     /* AArch64 target */ "libomptarget.rtl.aarch64.so"};
+
+static const char *RTLQuickCheckFiles[] = {
+    /* devicedtree is unique to ppc         */ "/sys/firmware/devicetree",
+    /* acpiis unique to x86                 */ "/sys/firmware/acpi",
+    /* nvidia0 is unique to CUDA target     */ "/dev/nvidia0",
+    /* kfd device is unique to HSA          */ "/dev/kfd",
+    /* FIXME find file unique to arm */  "/sys/NEED_UNIQUE_ARM_FILE_FOR_QUICK_TEST"
+};
 
 // forward declarations
 struct RTLInfoTy;
@@ -311,9 +321,18 @@ void RTLsTy::LoadRTLs() {
 
   DP("Loading RTLs...\n");
 
+  struct stat stat_buffer;
+  int listptr=0;
   // Attempt to open all the plugins and, if they exist, check if the interface
   // is correct and if they are supporting any devices.
   for (auto *Name : RTLNames) {
+ 
+    const char *QuickCheckName = RTLQuickCheckFiles[listptr++];
+    if(strcmp(QuickCheckName,"") && (stat(QuickCheckName,&stat_buffer) != 0 )) {
+      DP("Unable to find file '%s', skipping dlopen for '%s' \n", QuickCheckName,Name);
+      continue;
+    }
+
     DP("Loading library '%s'...\n", Name);
     void *dynlib_handle = dlopen(Name, RTLD_NOW);
 
@@ -464,6 +483,13 @@ EXTERN int omp_get_num_devices(void) {
   DP("Call to omp_get_num_devices returning %zd\n", Devices_size);
 
   return Devices_size;
+}
+
+EXTERN int omp_get_device_num(void) {
+
+  DP("Call to omp_get_device_num returning %d\n", HOST_DEVICE);
+
+  return HOST_DEVICE;
 }
 
 EXTERN int omp_get_initial_device(void) {

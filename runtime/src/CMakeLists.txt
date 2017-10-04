@@ -301,7 +301,11 @@ if(WIN32)
   endforeach()
 else()
 
-  install(TARGETS omp ${LIBOMP_INSTALL_KIND} DESTINATION lib${LIBOMP_LIBDIR_SUFFIX})
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+     install(TARGETS omp ${LIBOMP_INSTALL_KIND} DESTINATION lib-debug)
+  else()
+     install(TARGETS omp ${LIBOMP_INSTALL_KIND} DESTINATION lib${LIBOMP_LIBDIR_SUFFIX})
+  endif()
 
   if(${LIBOMP_INSTALL_ALIASES})
     # Create aliases (symlinks) of the library for backwards compatibility

@@ -13,6 +13,12 @@
 #include "omptarget-nvptx.h"
 #include <stdio.h>
 
+#define DSFLAG 1
+#define DSFLAG_INIT 1
+
+#define DSPRINT0 PRINT0
+#define DSPRINT  PRINT
+
 // Number of threads in the CUDA block.
 __device__ static unsigned getNumThreads() {
   return blockDim.x;
@@ -36,10 +42,15 @@ __device__ static unsigned getMasterThreadId() {
 }
 // The lowest ID among the active threads in the warp.
 __device__ static unsigned getWarpMasterActiveThreadId() {
-  unsigned long long Mask = __ballot(true);
+  //unsigned long long Mask = __ballot(true);
+  unsigned long long Mask = __kmpc_warp_active_thread_mask();
   unsigned long long ShNum = 32 - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
   unsigned long long Sh = Mask << ShNum;
   return __popc(Sh);
+}
+// The lowest ID among the active threads in the warp.
+EXTERN int32_t __kmpc_warp_master_active_thread_id() {
+  return getWarpMasterActiveThreadId();
 }
 // Return true if this is the master thread.
 __device__ static bool IsMasterThread() {
@@ -63,21 +74,29 @@ __device__ static size_t AlignVal(size_t Val) {
   return Val;
 }
 
-
-#define DSFLAG 0
-#define DSFLAG_INIT 0
+#if 0
+#if 0
+#define DSFLAG 1
+#define DSFLAG_INIT 1
 #define DSPRINT(_flag, _str, _args...)                                         \
   {                                                                            \
     if (_flag) {                                                               \
-      /*printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x, _args);*/          \
+      printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x, _args);          \
     }                                                                          \
   }
 #define DSPRINT0(_flag, _str)                                                  \
   {                                                                            \
     if (_flag) {                                                               \
-      /*printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x);*/                 \
+      printf("(%d,%d) -> " _str, blockIdx.x, threadIdx.x);                 \
     }                                                                          \
   }
+#else
+#define DSFLAG 0
+#define DSFLAG_INIT 0
+#define DSPRINT(_flag, _str, _args...)
+#define DSPRINT0(_flag, _str)
+#endif
+#endif
 
 // Initialize the shared data structures. This is expected to be called for the master thread and warp masters.
 // \param RootS: A pointer to the root of the data sharing stack.
@@ -123,7 +142,10 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
 
   // If the runtime has been elided, used __shared__ memory for master-worker
   // data sharing.
-  if (!IsOMPRuntimeInitialized) return (void *) &DataSharingState;
+  if (!IsOMPRuntimeInitialized) {
+    PRINT0(LD_IO | LD_PAR, "return as runtime not initialized\n");
+    return (void *) &DataSharingState;
+  }
 
   DSPRINT(DSFLAG,"Data Size %016llx\n", SharingDataSize);
   DSPRINT(DSFLAG,"Default Data Size %016llx\n", SharingDefaultDataSize);
@@ -299,7 +321,10 @@ EXTERN void* __kmpc_get_data_sharing_environment_frame(int32_t SourceThreadID,
   // If the runtime has been elided, use __shared__ memory for master-worker
   // data sharing.  We're reusing the statically allocated data structure
   // that is used for standard data sharing.
-  if (!IsOMPRuntimeInitialized) return (void *) &DataSharingState;
+  if (!IsOMPRuntimeInitialized) {
+    PRINT0(LD_IO | LD_PAR, "return as runtime not initialized\n");
+    return (void *) &DataSharingState;
+  }
 
   // Get the frame used by the requested thread.
 

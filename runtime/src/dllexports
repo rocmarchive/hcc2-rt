@@ -511,6 +511,7 @@ kmp_set_warnings_off                        780
     omp_get_default_device                  880
     %ifdef stub
         omp_get_num_devices                 881
+        omp_get_device_num                  891
     %endif
 %endif # OMP_40
 

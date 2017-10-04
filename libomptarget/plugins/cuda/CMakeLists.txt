@@ -28,9 +28,12 @@ if(LIBOMPTARGET_DEP_LIBELF_FOUND)
     
       add_library(omptarget.rtl.cuda SHARED src/rtl.cpp)
       
-      # Install plugin under the lib destination folder.
-      install(TARGETS omptarget.rtl.cuda LIBRARY DESTINATION lib${LIBOMPTARGET_LIBDIR_SUFFIX})
-      
+      if(CMAKE_BUILD_TYPE MATCHES Debug)
+         install(TARGETS omptarget.rtl.cuda LIBRARY DESTINATION "lib-debug")
+      else()
+         install(TARGETS omptarget.rtl.cuda LIBRARY DESTINATION "lib")
+      endif()
+ 
       target_link_libraries(omptarget.rtl.cuda 
         ${LIBOMPTARGET_DEP_CUDA_LIBRARIES} 
         cuda 

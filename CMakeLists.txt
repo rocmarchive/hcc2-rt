@@ -22,3 +22,5 @@ if (OPENMP_ENABLE_LIBOMPTARGET)
   add_subdirectory(libomptarget)
 endif()
 
+add_subdirectory(cugcn/libdevice)
+add_subdirectory(utils)

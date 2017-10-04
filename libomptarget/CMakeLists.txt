@@ -56,6 +56,7 @@ set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64le-ibm-linux
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} powerpc64-ibm-linux-gnu")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} x86_64-pc-linux-gnu")
 set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} nvptx64-nvidia-cuda")
+set (LIBOMPTARGET_ALL_TARGETS "${LIBOMPTARGET_ALL_TARGETS} amdgcn--cuda")
 
 # Once the plugins for the different targets are validated, they will be added to
 # the list of supported targets in the current system.
@@ -71,7 +72,8 @@ if(LIBOMPTARGET_HAVE_STD_CPP11_FLAG)
   libomptarget_say("Building offloading runtime library libomptarget.")
 
   # Enable support for C++11.
-  add_definitions(-std=c++11)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99")
   
   if(LIBOMPTARGET_ENABLE_WERROR AND LIBOMPTARGET_HAVE_WERROR_FLAG)
     add_definitions(-Werror)
@@ -97,9 +99,12 @@ if(LIBOMPTARGET_HAVE_STD_CPP11_FLAG)
   target_link_libraries(omptarget
     ${CMAKE_DL_LIBS}
     "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/exports")
-  
-  # Install libomptarget under the lib destination folder.
-  install(TARGETS omptarget LIBRARY DESTINATION lib${LIBOMPTARGET_LIBDIR_SUFFIX})
+
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    install(TARGETS omptarget LIBRARY DESTINATION "lib-debug")
+  else()
+    install(TARGETS omptarget LIBRARY DESTINATION "lib")
+  endif()
   
   # Retrieve the path to the resulting library so that it can be used for 
   # testing.

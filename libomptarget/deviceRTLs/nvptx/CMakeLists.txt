@@ -71,7 +71,8 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
   
   # Activate RTL message dumps if requested by the user.
   if(LIBOMPTARGET_NVPTX_DEBUG)
-    set(CUDA_DEBUG -DOMPTARGET_NVPTX_DEBUG=-1 -g --ptxas-options=-v)
+    #set(CUDA_DEBUG -DOMPTARGET_NVPTX_DEBUG=-1 -g --ptxas-options=-v)
+    set(CUDA_DEBUG -DOMPTARGET_NVPTX_DEBUG=-1 -g )
   endif()
 
   # NVPTX runtime library has to be statically linked. Dynamic linking is not
@@ -83,7 +84,11 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
       OPTIONS ${CUDA_ARCH} ${CUDA_DEBUG})
       
   # Install device RTL under the lib destination folder.
-  install(TARGETS omptarget-nvptx ARCHIVE DESTINATION "lib")
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+     install(TARGETS omptarget-nvptx ARCHIVE DESTINATION "lib-debug")
+  else()
+     install(TARGETS omptarget-nvptx ARCHIVE DESTINATION "lib")
+  endif()
 
   target_link_libraries(omptarget-nvptx ${CUDA_LIBRARIES})
   
@@ -215,7 +220,11 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
                          $<TARGET_FILE_DIR:omptarget-nvptx>)
 
       # Install device RTL under the lib destination folder.
-      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx.bc DESTINATION "lib")  
+      if(CMAKE_BUILD_TYPE MATCHES Debug)
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx.bc DESTINATION "lib-debug")
+      else()
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx.bc DESTINATION "lib")
+      endif()
       
     endif()
   endif()

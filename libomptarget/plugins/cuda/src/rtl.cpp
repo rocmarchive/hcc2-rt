@@ -21,6 +21,8 @@
 
 #include "omptargetplugin.h"
 
+#include "rtl.h"
+
 #ifndef TARGET_NAME
 #define TARGET_NAME CUDA
 #endif
@@ -221,6 +223,9 @@ public:
     if (NumberOfDevices == 0) {
       DP("There are no devices supporting CUDA.\n");
       return;
+    }
+    else {
+      DP("There are %d devices supporting CUDA.\n", NumberOfDevices);
     }
 
     FuncGblEntries.resize(NumberOfDevices);
@@ -528,6 +533,51 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
     DeviceInfo.addOffloadEntry(device_id, entry);
   }
 
+  {// send device environment here
+    omptarget_device_environmentTy device_env;
+
+    device_env.num_devices = DeviceInfo.NumberOfDevices;
+    device_env.device_num = device_id;
+
+#ifdef OMPTARGET_DEBUG
+    if (getenv("DEVICE_DEBUG"))
+      device_env.debug_mode = 1;
+    else
+      device_env.debug_mode = 0;
+#endif
+
+    const char * device_env_Name="omptarget_device_environment";
+    CUdeviceptr device_env_Ptr;
+    size_t cusize;
+
+    err = cuModuleGetGlobal(&device_env_Ptr, &cusize, cumod, device_env_Name);
+
+    if (err == CUDA_SUCCESS) {
+      if ((size_t)cusize != sizeof(device_env)) {
+        DP("Global device_environment '%s' - size mismatch (%zd != %zd)\n",
+            device_env_Name, cusize, sizeof(int32_t));
+        CUDA_ERR_STRING(err);
+        return NULL;
+      }
+
+      err = cuMemcpyHtoD(device_env_Ptr, &device_env, cusize);
+      if (err != CUDA_SUCCESS) {
+        DP("Error when copying data from host to device. Pointers: "
+            "host = " DPxMOD ", device = " DPxMOD ", size = %zd\n",
+            DPxPTR(&device_env), DPxPTR(device_env_Ptr), cusize);
+        CUDA_ERR_STRING(err);
+        return NULL;
+      }
+
+      DP("Sending global device environment %lu bytes\n", (size_t)cusize);
+    } else {
+      DP("Finding global device environment '%s' - symbol missing.\n", device_env_Name);
+      // no need to return NULL, consider this is a not a device debug build.
+      //CUDA_ERR_STRING(err);
+      //return NULL;
+    }
+  }
+
   return DeviceInfo.getOffloadEntriesTable(device_id);
 }
 
@@ -627,14 +677,18 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     return OFFLOAD_FAIL;
   }
 
+  DP("Run target team region thread_limit %d\n", thread_limit);
+
   // All args are references.
   // Allocate one more pointer for the reduction scratchpad.
   std::vector<void *> args(arg_num + 1);
   std::vector<void *> ptrs(arg_num);
 
+  DP("Arg_num: %d\n", arg_num);
   for (int32_t i = 0; i < arg_num; ++i) {
     ptrs[i] = (void *)((intptr_t)tgt_args[i] + tgt_offsets[i]);
     args[i] = &ptrs[i];
+    DP("Arg[%d]: %p, size: %lu\n", i, ptrs[i], sizeof(ptrs[i]));
   }
 
   KernelTy *KernelInfo = (KernelTy *)tgt_entry_ptr;
@@ -654,6 +708,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     if (KernelInfo->ExecutionMode == GENERIC) {
       // Leave room for the master warp which will be added below.
       cudaThreadsPerBlock -= DeviceInfo.WarpSize[device_id];
+      DP("Preparing %d threads\n", cudaThreadsPerBlock);
     }
     DP("Setting CUDA threads per block to default %d\n",
         DeviceInfo.NumThreads[device_id]);
@@ -665,6 +720,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
         DeviceInfo.ThreadsPerBlock[device_id]);
   }
 
+  DP("Preparing %d threads\n", cudaThreadsPerBlock);
+
   int kernel_limit;
   err = cuFuncGetAttribute(&kernel_limit,
       CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, KernelInfo->Func);
@@ -674,6 +731,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
       DP("Threads per block capped at kernel limit %d\n", kernel_limit);
     }
   }
+
+  DP("Preparing %d threads\n", cudaThreadsPerBlock);
 
   int cudaBlocksPerGrid;
   if (team_num <= 0) {
@@ -767,6 +826,9 @@ int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
   // use one team and the default number of threads.
   const int32_t team_num = 1;
   const int32_t thread_limit = 0;
+
+  DP("Run target region thread_limit %d\n", thread_limit);
+
   return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
       tgt_offsets, arg_num, team_num, thread_limit, 0);
 }
