@@ -398,20 +398,20 @@ int main(void) {
   // Test: Ensure coalesced scheduling on GPU.
   //
   printf("L\n");
-  TEST({
+  TESTD("omp target teams num_teams(1) thread_limit(33)", {
     S[0] = 0;
     for (int i = 0; i < 99; i++) {
       A[i] = 0;
     }
-    _Pragma("omp parallel for num_threads(33)")
+    _Pragma("omp parallel for")
     for (int i = 0; i < 99; i++) {
       A[i] += i - omp_get_thread_num();
     }
-    _Pragma("omp parallel for schedule(auto) num_threads(33)")
+    _Pragma("omp parallel for schedule(auto)")
     for (int i = 0; i < 99; i++) {
       A[i] += i - omp_get_thread_num();
     } 
-    _Pragma("omp parallel for schedule(static,1) num_threads(33)")
+    _Pragma("omp parallel for schedule(static,1)")
     for (int i = 0; i < 99; i++) {
       A[i] += i - omp_get_thread_num();
     }

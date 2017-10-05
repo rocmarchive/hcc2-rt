@@ -118,7 +118,9 @@ int main(void) {
   // We assume a maximum of 128 threads in the parallel region (32 are
   // reserved for the master warp).
   //
-  for (int t = 1; t <= 128; t++) {
+  // This test fails on Volta because a parallel region can only contain
+  // <=32 or a multiple of 32 workers.
+  for (int t = 1; t <= 128; t += t < 32 ? 1 : 32) {
     ZERO(A);
     int threads[1]; threads[0] = t;
     TEST({

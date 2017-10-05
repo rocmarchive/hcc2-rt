@@ -997,6 +997,62 @@ int32_t __kmpc_nvptx_simd_reduce_nowait(int32_t global_tid,
   }
 }
 
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+INLINE
+int32_t nvptx_parallel_reduce_nowait(int32_t global_tid, int32_t num_vars,
+                                     size_t reduce_size, void *reduce_data,
+                                     kmp_ShuffleReductFctPtr shflFct,
+                                     kmp_InterWarpCopyFctPtr cpyFct,
+                                     bool isSPMDExecutionMode,
+                                     bool isRuntimeUninitialized = false) {
+  /*
+   * This reduce function handles reduction within a team. It handles
+   * parallel regions in both L1 and L2 parallelism levels. It also
+   * supports Generic, SPMD, and NoOMP modes.
+   *
+   * 1. Reduce within a warp.
+   * 2. Warp master copies value to warp 0 via shared memory.
+   * 3. Warp 0 reduces to a single value.
+   * 4. The reduced value is available in the thread that returns 1.
+   */
+  uint32_t BlockThreadId = GetLogicalThreadIdInBlock();
+  uint32_t NumThreads = GetNumberOfOmpThreads(BlockThreadId, isSPMDExecutionMode, isRuntimeUninitialized);
+
+  // On Volta and newer architectures we have 1..32 threads and beyond that, always
+  // a multiple of 32.
+  uint32_t Liveness = NumThreads >= WARPSIZE ? 0xffffffff : (1u << NumThreads) - 1;
+  if (Liveness == 0xffffffff) // Full warp
+    gpu_regular_warp_reduce(reduce_data, shflFct);
+  else if (!(Liveness & (Liveness + 1))) // Partial warp but contiguous lanes
+    gpu_irregular_warp_reduce(reduce_data, shflFct,
+        /*LaneCount=*/__popc(Liveness), /*LaneId=*/GetThreadIdInBlock() % WARPSIZE);
+  else if (!isRuntimeUninitialized) // Dispersed lanes. Only threads in L2 parallel region may enter here; return early.
+    return gpu_irregular_simd_reduce(reduce_data, shflFct);
+
+  // When we have more than [warpsize] number of threads
+  // a block reduction is performed here.
+  //
+  // Only L1 parallel region can enter this if condition.
+  if (NumThreads > WARPSIZE) {
+    uint32_t WarpsNeeded = (NumThreads+WARPSIZE-1)/WARPSIZE;
+    // Gather all the reduced values from each warp
+    // to the first warp.
+    cpyFct(reduce_data, WarpsNeeded);
+
+    uint32_t WarpId = BlockThreadId/WARPSIZE;
+    if (WarpId == 0)
+      gpu_irregular_warp_reduce(reduce_data, shflFct, WarpsNeeded, BlockThreadId);
+
+    return BlockThreadId == 0;
+  } else if (isRuntimeUninitialized /* Never an L2 parallel region without the OMP runtime */) {
+    return BlockThreadId == 0;
+  }
+
+  // Get the OMP thread Id. This is different from BlockThreadId in the case of
+  // an L2 parallel region.
+  return GetOmpThreadId(BlockThreadId, isSPMDExecutionMode, isRuntimeUninitialized) == 0;
+}
+#else
 INLINE
 int32_t nvptx_parallel_reduce_nowait(int32_t global_tid, int32_t num_vars,
                                      size_t reduce_size, void *reduce_data,
@@ -1049,6 +1105,7 @@ int32_t nvptx_parallel_reduce_nowait(int32_t global_tid, int32_t num_vars,
   // an L2 parallel region.
   return GetOmpThreadId(BlockThreadId, isSPMDExecutionMode, isRuntimeUninitialized) == 0;
 }
+#endif // __CUDA_ARCH__ >= 700
 
 EXTERN
 int32_t __kmpc_nvptx_parallel_reduce_nowait(

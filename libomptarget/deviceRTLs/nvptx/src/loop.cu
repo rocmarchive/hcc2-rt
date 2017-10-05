@@ -700,6 +700,28 @@ EXTERN void __kmpc_for_static_fini(kmp_Indent *loc, int32_t global_tid) {
   PRINT0(LD_IO, "call kmpc_for_static_fini\n");
 }
 
+namespace {
+INLINE void syncWorkersInGenericMode(uint32_t NumThreads) {
+  int NumWarps = ((NumThreads + warpSize - 1) / warpSize);
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+  // On Volta and newer architectures we require that all lanes in
+  // a warp (at least, all present for the kernel launch) participate in the
+  // barrier.  This is enforced when launching the parallel region.  An
+  // exception is when there are < warpSize workers.  In this case use syncwarp().
+  if (NumThreads <= warpSize) {
+    assert (warpSize == 32);
+    uint32_t mask = NumThreads == warpSize ? 0 : 1u << NumThreads;
+    mask -= 1;
+    __syncwarp(mask);
+  } else {
+#endif
+    named_sync(L1_BARRIER, warpSize * NumWarps);
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+  }
+#endif
+}
+};
+
 EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
   int32_t varNum, void *array) {
   PRINT0(LD_IO, "call to __kmpc_reduce_conditional_lastprivate(...)\n");
@@ -709,7 +731,6 @@ EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
                            isRuntimeUninitialized());
   uint32_t NumThreads = GetNumberOfOmpThreads(GetLogicalThreadIdInBlock(),
       isSPMDMode(), isRuntimeUninitialized());
-  int NumWarps = ((NumThreads + warpSize - 1) / warpSize);
   uint64_t *Buffer = teamDescr.getLastprivateIterBuffer();
   for (unsigned i = 0; i < varNum; i++) {
     // Reset buffer.
@@ -717,7 +738,7 @@ EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
       *Buffer = 0;  // Reset to minimum loop iteration value.
 
     // Barrier.
-    named_sync(L1_BARRIER, warpSize * NumWarps);
+    syncWorkersInGenericMode(NumThreads);
 
     // Atomic max of iterations.
     uint64_t *varArray = (uint64_t *) array;
@@ -725,13 +746,12 @@ EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
     (void) atomicMax((unsigned long long int *) Buffer, (unsigned long long int) elem);
 
     // Barrier.
-    __threadfence_block();
-    named_sync(L1_BARRIER, warpSize * NumWarps);
+    syncWorkersInGenericMode(NumThreads);
 
     // Read max value and update thread private array.
     varArray[i] = *Buffer;
 
     // Barrier.
-    named_sync(L1_BARRIER, warpSize * NumWarps);
+    syncWorkersInGenericMode(NumThreads);
   }
 }
