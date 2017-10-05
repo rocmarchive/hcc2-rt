@@ -188,13 +188,8 @@ void __kmpc_push_target_tripcount(int64_t device_id, uint64_t loop_tripcount);
 #endif
 
 #ifdef OMPTARGET_DEBUG
-
 #include <stdio.h>
-
-static const char * debug_mode=getenv("OFFLOAD_DEBUG");
-
 #define DEBUGP(prefix, ...)                                                    \
-  if (debug_mode)                                                              \
   {                                                                            \
     fprintf(stderr, "%s --> ", prefix);                                        \
     fprintf(stderr, __VA_ARGS__);                                              \

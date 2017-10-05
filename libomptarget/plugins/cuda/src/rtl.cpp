@@ -200,6 +200,11 @@ public:
     if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
       DebugLevel = std::stoi(envStr);
     }
+    if (!DebugLevel) {
+      if (char *envStr = getenv("OFFLOAD_DEBUG")) {
+        DebugLevel = std::stoi(envStr);
+      }
+    }
 #endif // OMPTARGET_DEBUG
 
     DP("Start initializing CUDA\n");
@@ -705,13 +710,13 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     }
   } else {
     cudaThreadsPerBlock = DeviceInfo.NumThreads[device_id];
+    DP("Setting CUDA threads per block to default %d\n",
+        DeviceInfo.NumThreads[device_id]);
     if (KernelInfo->ExecutionMode == GENERIC) {
       // Leave room for the master warp which will be added below.
       cudaThreadsPerBlock -= DeviceInfo.WarpSize[device_id];
-      DP("Preparing %d threads\n", cudaThreadsPerBlock);
+      DP("Subtracting master warp: 1%d threads\n", DeviceInfo.WarpSize[device_id]);
     }
-    DP("Setting CUDA threads per block to default %d\n",
-        DeviceInfo.NumThreads[device_id]);
   }
 
   if (cudaThreadsPerBlock > DeviceInfo.ThreadsPerBlock[device_id]) {

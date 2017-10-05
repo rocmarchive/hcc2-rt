@@ -310,6 +310,11 @@ void RTLsTy::LoadRTLs() {
   if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
     DebugLevel = std::stoi(envStr);
   }
+  if (!DebugLevel) {
+    if (char *envStr = getenv("OFFLOAD_DEBUG")) {
+      DebugLevel = std::stoi(envStr);
+    }
+  }
 #endif // OMPTARGET_DEBUG
 
   // Parse environment variable OMP_TARGET_OFFLOAD (if set)
