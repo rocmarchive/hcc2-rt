@@ -107,15 +107,15 @@ endmacro()
 
 macro(add_cuda_bc_library name dir)
   set(cu_cmd ${HCC2_BINDIR}/clang++
-    -S -emit-llvm
+    -emit-llvm
     --cuda-device-only
     -nocudalib
     -O${optimization_level}
     --cuda-gpu-arch=${mcpu}
     ${CUDA_DEBUG}
-    -I${CMAKE_CURRENT_SOURCE_DIR}/src)
+    -c)
 
-  set(ll_files)
+  set(bc1_files)
 
   foreach(file ${ARGN})
     file(RELATIVE_PATH rfile ${dir} ${file})
@@ -123,23 +123,23 @@ macro(add_cuda_bc_library name dir)
     get_filename_component(fname ${rfile} NAME_WE)
     get_filename_component(fext ${rfile} EXT)
 
-    set(ll_filename ${fname}.${mcpu}.ll)
+    set(bc1_filename ${fname}.${mcpu}.bc)
 
     file(GLOB h_files "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 
     add_custom_command(
-      OUTPUT ${ll_filename}
-      COMMAND ${cu_cmd} ${CMAKE_CURRENT_SOURCE_DIR}/src/${fname}.cu -o ${ll_filename}
+      OUTPUT ${bc1_filename}
+      COMMAND ${cu_cmd} ${CMAKE_CURRENT_SOURCE_DIR}/src/${fname}.cu -o ${bc1_filename}
       DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/${fname}.cu" ${h_files}
       )
 
-    list(APPEND ll_files ${ll_filename})
+    list(APPEND bc1_files ${bc1_filename})
   endforeach()
 
   add_custom_command(
     OUTPUT linkout.cuda.${mcpu}.bc
-    COMMAND ${HCC2_BINDIR}/llvm-link ${ll_files} -o linkout.cuda.${mcpu}.bc
-    DEPENDS ${ll_files}
+    COMMAND ${HCC2_BINDIR}/llvm-link -o linkout.cuda.${mcpu}.bc ${bc1_files}
+    DEPENDS ${bc1_files}
     )
 
   list(APPEND bc_files linkout.cuda.${mcpu}.bc)
@@ -168,9 +168,7 @@ macro(add_bc_library name dir)
 
   add_custom_command(
     OUTPUT linkout.${mcpu}.bc
-    #FIXME: remove the warning suppress when the address space strategy are unified
-    #COMMAND ${HCC2_BINDIR}/llvm-link ${bc_files} -o linkout.${mcpu}.bc
-    COMMAND ${HCC2_BINDIR}/llvm-link -suppress-warnings ${bc_files} -o linkout.${mcpu}.bc
+    COMMAND ${HCC2_BINDIR}/llvm-link ${bc_files} -o linkout.${mcpu}.bc
     DEPENDS ${bc_files}
     )
   add_custom_command(

@@ -165,6 +165,7 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
       set(CUDA_FLAGS 
           -emit-llvm 
           -O1
+          -nocudalib
           -Xclang -target-feature 
           -Xclang +${CUDA_PTX_VERSION} 
           --cuda-device-only 

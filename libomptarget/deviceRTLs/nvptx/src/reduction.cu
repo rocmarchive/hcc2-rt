@@ -162,6 +162,7 @@ INLINE __device__ uint64_t atomicCAS(uint64_t *_addr, uint64_t _compare,
   return (uint64_t)(atomicCAS(addr, compare, val));
 }
 
+#if 0
 INLINE __device__ float complex atomicCAS(float complex *_addr,
                                           float complex _compare,
                                           float complex _val) {
@@ -170,6 +171,7 @@ INLINE __device__ float complex atomicCAS(float complex *_addr,
   double val = (double)(_val);
   return (float complex)(atomicCAS(addr, compare, val));
 }
+#endif
 
 #define ATOMIC_GENOP_NATIVE(_name, _dtype, _op, _cudaop)                       \
   EXTERN void __kmpc_atomic_##_name##_##_op(kmp_Indent *id_ref, int32_t gtid,  \
@@ -252,6 +254,7 @@ INLINE __device__ float complex atomicCAS(float complex *_addr,
       return oldvalue;                                                         \
   }
 
+#if 0
 INLINE __device__ void dc_add(double complex *lhs, double complex rhs) {
   double *ptrl = (double *)lhs;
   double *ptrr = (double *)&rhs;
@@ -333,6 +336,7 @@ ATOMIC_GENOP_DC(add);
 ATOMIC_GENOP_DC(sub);
 ATOMIC_GENOP_DC(mul);
 ATOMIC_GENOP_DC(div);
+#endif
 
 INLINE __device__ uint64_t fc_add(float r1, float i1, float r2, float i2) {
   uint64_t result;
@@ -370,6 +374,7 @@ INLINE __device__ uint64_t fc_div(float r1, float i1, float r2, float i2) {
   return result;
 }
 
+#if 0
 #define ATOMIC_GENOP_FC(_op)                                                   \
   EXTERN void __kmpc_atomic_cmplx4_##_op(kmp_Indent *id_ref, int32_t gtid,     \
                                          float complex *lhs,                   \
@@ -472,6 +477,7 @@ ATOMIC_GENOP_FC_REV(sub);
 ATOMIC_GENOP_FC(mul);
 ATOMIC_GENOP_FC(div);
 ATOMIC_GENOP_FC_REV(div);
+#endif
 
 // for int and uint
 #define ATOMIC_GENOP_ALL_MIXED(_name, _dirname, _tname, _optype)               \

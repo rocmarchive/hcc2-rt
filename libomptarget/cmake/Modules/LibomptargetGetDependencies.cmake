@@ -186,7 +186,7 @@ find_path (
   PATHS
   $ENV{HSA_RUNTIME_PATH}/include
   /opt/rocm/include/hsa
-  /usr/local/include
+  /usr/local/include/hsa
   )
 
 find_path (

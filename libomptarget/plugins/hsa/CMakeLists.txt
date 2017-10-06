@@ -59,6 +59,11 @@ endif()
 # Define the suffix for the runtime messaging dumps.
 add_definitions(-DTARGET_NAME=HSA)
 
+execute_process(COMMAND "/bin/uname" "-p" OUTPUT_VARIABLE uname_arch)
+if ("${uname_arch}" STREQUAL "ppc64le\n" )
+  add_definitions(-DLITTLEENDIAN_CPU)
+endif()
+
 # cancel z,defs
 #set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--unresolved-symbols=ignore-all")
 
