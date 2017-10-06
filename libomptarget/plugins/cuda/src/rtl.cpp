@@ -715,7 +715,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     if (KernelInfo->ExecutionMode == GENERIC) {
       // Leave room for the master warp which will be added below.
       cudaThreadsPerBlock -= DeviceInfo.WarpSize[device_id];
-      DP("Subtracting master warp: 1%d threads\n", DeviceInfo.WarpSize[device_id]);
+      DP("Subtracting master warp: -%d threads\n", DeviceInfo.WarpSize[device_id]);
     }
   }
 
