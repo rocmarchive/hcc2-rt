@@ -34,7 +34,7 @@
 #include "atmi_runtime.h"
 #include "atmi_interop_hsa.h"
 
-#include "omptarget.h"
+#include "omptargetplugin.h"
 
 #include "rtl.h"
 
@@ -62,6 +62,7 @@
 #ifndef TARGET_NAME
 #define TARGET_NAME AMDHSA
 #endif
+
 #define GETNAME2(name) #name
 #define GETNAME(name) GETNAME2(name)
 #define DP(...) DEBUGP("Target " GETNAME(TARGET_NAME) " RTL",__VA_ARGS__)
@@ -697,7 +698,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
    return DeviceInfo.getOffloadEntriesTable(device_id);
 }
 
-void *__tgt_rtl_data_alloc(int device_id, int64_t size){
+void *__tgt_rtl_data_alloc(int device_id, int64_t size, void *){
   void *ptr = NULL;
     assert(device_id < (int)DeviceInfo.Machine->device_count_by_type[ATMI_DEVTYPE_GPU] && "Device ID too large");
     atmi_mem_place_t place = DeviceInfo.GPUMEMPlaces[device_id];
@@ -749,7 +750,7 @@ int32_t __tgt_rtl_data_delete(int device_id, void* tgt_ptr) {
 }
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id,
-    void *tgt_entry_ptr, void **tgt_args, int32_t arg_count,
+    void *tgt_entry_ptr, void **tgt_args, ptrdiff_t *Offsets, int32_t arg_count,
     int32_t team_num, int32_t thread_limit,
     uint64_t loop_tripcount) {
 
@@ -880,14 +881,14 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id,
 }
 
 int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-    void **tgt_args, int32_t arg_num)
+    void **tgt_args, ptrdiff_t *Offsets, int32_t arg_num)
 {
   // use one team and one thread
   // fix thread num
   int32_t team_num = 1;
   int32_t thread_limit = 0; // use default
   return __tgt_rtl_run_target_team_region(device_id,
-      tgt_entry_ptr, tgt_args, arg_num, team_num, thread_limit, 0);
+      tgt_entry_ptr, tgt_args, Offsets, arg_num, team_num, thread_limit, 0);
 }
 
 #ifdef __cplusplus
