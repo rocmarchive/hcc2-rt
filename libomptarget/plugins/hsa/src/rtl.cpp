@@ -63,18 +63,30 @@
 #define TARGET_NAME AMDHSA
 #endif
 
+#ifdef OMPTARGET_DEBUG
+static int DebugLevel = 0;
+
 #define GETNAME2(name) #name
 #define GETNAME(name) GETNAME2(name)
-#define DP(...) DEBUGP("Target " GETNAME(TARGET_NAME) " RTL",__VA_ARGS__)
+#define DP(...) \
+  do { \
+    if (DebugLevel > 0) { \
+      DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__); \
+    } \
+  } while (false)
+#else // OMPTARGET_DEBUG
+#define DP(...) {}
+#endif // OMPTARGET_DEBUG
+
 #ifdef OMPTARGET_DEBUG
 #define check(msg, status) \
   if (status != ATMI_STATUS_SUCCESS) { \
     /* fprintf(stderr, "[%s:%d] %s failed.\n", __FILE__, __LINE__, #msg);*/ \
-    DP(#msg" failed\n") \
+    DP(#msg" failed\n"); \
     /*assert(0);*/ \
   } else { \
     /* fprintf(stderr, "[%s:%d] %s succeeded.\n", __FILE__, __LINE__, #msg); */ \
-    DP(#msg" succeeded\n") \
+    DP(#msg" succeeded\n"); \
   }
 #else
 #define check(msg, status) \
@@ -195,7 +207,19 @@ public:
   }
 
   RTLDeviceInfoTy() {
+#ifdef OMPTARGET_DEBUG
+    if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
+      DebugLevel = std::stoi(envStr);
+    }
+    if (!DebugLevel) {
+      if (char *envStr = getenv("OFFLOAD_DEBUG")) {
+        DebugLevel = std::stoi(envStr);
+      }
+    }
+#endif // OMPTARGET_DEBUG
+
     DP("Start initializing HSA-ATMI\n");
+
     atmi_status_t err = atmi_init(ATMI_DEVTYPE_ALL);
     if (err != ATMI_STATUS_SUCCESS) {
       DP("Error when initializing HSA-ATMI\n");
