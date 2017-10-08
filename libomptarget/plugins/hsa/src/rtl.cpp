@@ -821,8 +821,9 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   DP("Run target team region thread_limit %d\n", thread_limit);
 
   // All args are references.
-  std::vector<void *> args(arg_num);
-  std::vector<size_t> arg_sizes(arg_num);
+  // Allocate one more pointer for the reduction scratchpad.
+  std::vector<void *> args(arg_num + 1);
+  std::vector<size_t> arg_sizes(arg_num + 1);
 
   DP("Arg_num: %d\n", arg_num);
   for (int32_t i = 0; i < arg_num; ++i) {
@@ -830,7 +831,9 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     arg_sizes[i] = sizeof(void *);
     DP("Arg[%d]: %p, size: %lu\n", i, tgt_args[i], sizeof(tgt_args[i]));
   }
-  arg_sizes[arg_num- 1] = sizeof(int);
+
+  // ??? this line is added in commit 56d2dd45
+  // arg_sizes[arg_num- 1] = sizeof(int);
 
   KernelTy *KernelInfo = (KernelTy *)tgt_entry_ptr;
 
@@ -907,6 +910,22 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     DP("Using requested number of teams %d\n", team_num);
   }
 
+  void *Scratchpad = NULL;
+  size_t ScratchpadSize = KernelInfo->NumReductionVars == 0 ? 0 :
+      256 /*space for timestamp*/ +
+      threadsPerGroup * KernelInfo->ReductionVarsSize +
+      KernelInfo->NumReductionVars * /*padding=*/256;
+  if (ScratchpadSize > 0) {
+    Scratchpad = __tgt_rtl_data_alloc(device_id, ScratchpadSize, Scratchpad);
+#ifdef OMPTARGET_DEBUG
+    if (Scratchpad == NULL)
+      DP("Failed to allocate reduction scratchpad\n");
+#endif
+    unsigned timestamp = 0;
+    __tgt_rtl_data_submit(device_id, Scratchpad, &timestamp, sizeof(unsigned));
+  }
+  args[arg_num] = &Scratchpad;
+
   // Run on the device.
   char *kernel_name = (char *)KernelInfo->Func;
   DP("Launch kernel %s with %d blocks and %d threads\n", kernel_name, num_groups,
@@ -930,6 +949,9 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   // FIXME: if kernel launch is asynchronous, then kernel should be added to a
   // vector in deviceinfo and released in the destructor
   atmi_kernel_release(kernel);
+
+  if (Scratchpad)
+    __tgt_rtl_data_delete(device_id, Scratchpad);
 
   return OFFLOAD_SUCCESS;
 }
