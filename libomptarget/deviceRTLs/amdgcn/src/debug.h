@@ -167,7 +167,7 @@
 // implement
 #if OMPTARGET_NVPTX_DEBUG
 
-#define DON(_flag) ((OMPTARGET_NVPTX_DEBUG) & (_flag))
+#define DON(_flag) ((unsigned)(OMPTARGET_NVPTX_DEBUG) & (_flag))
 
 #define PRINT0(_flag, _str)                                                    \
   {                                                                            \
