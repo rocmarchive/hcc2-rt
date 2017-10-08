@@ -330,6 +330,10 @@ EXTERN void __kmpc_dispatch_fini_4u(kmp_Indent *loc, int32_t global_tid);
 EXTERN void __kmpc_dispatch_fini_8(kmp_Indent *loc, int32_t global_tid);
 EXTERN void __kmpc_dispatch_fini_8u(kmp_Indent *loc, int32_t global_tid);
 
+// Support for reducing conditional lastprivate variables
+EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc,
+  int32_t global_tid, int32_t varNum, void *array);
+
 // reduction
 EXTERN int32_t __kmpc_reduce41(kmp_Indent *loc, int32_t global_tid,
                                int32_t varNum, size_t reduceSize,
@@ -1254,6 +1258,7 @@ EXTERN void __array_atomic_float8_max(kmp_Indent *id_ref, int32_t tid,
                                       double *lhs, double *rhs, int64_t n);
 
 // non standard
+EXTERN void __kmpc_kernel_init_params(void *ReductionScratchpadPtr);
 EXTERN void __kmpc_kernel_init(int ThreadLimit, int16_t RequiresOMPRuntime);
 EXTERN void __kmpc_kernel_deinit(int16_t IsOMPRuntimeInitialized);
 EXTERN void __kmpc_spmd_kernel_init(int ThreadLimit,
