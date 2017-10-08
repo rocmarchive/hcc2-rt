@@ -808,22 +808,15 @@ int32_t __tgt_rtl_data_delete(int device_id, void* tgt_ptr) {
     return OFFLOAD_SUCCESS;
 }
 
-int32_t __tgt_rtl_run_target_team_region(int32_t device_id,
-    void *tgt_entry_ptr, void **tgt_args, ptrdiff_t *Offsets, int32_t arg_count,
-    int32_t team_num, int32_t thread_limit,
-    uint64_t loop_tripcount) {
+int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
+    void **tgt_args, ptrdiff_t *Offsets, int32_t arg_num, int32_t team_num,
+    int32_t thread_limit, uint64_t loop_tripcount) {
 
-  //atmi_status_t err;
-
-  int32_t arg_num = arg_count; // not sure why omptarget includes a last NULL arg
+  // atmi_status_t err;
+  // not sure why omptarget includes a last NULL arg
 
   // Set the context we are using
   // update thread limit content in gpu memory if un-initialized or specified from host
-
-  /*
-   * Set limit based on ThreadsPerGroup and GroupsPerDevice
-   */
-  int threadsPerGroup;
 
   DP("Run target team region thread_limit %d\n", thread_limit);
 
@@ -841,27 +834,28 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id,
 
   KernelTy *KernelInfo = (KernelTy *)tgt_entry_ptr;
 
+  /*
+   * Set limit based on ThreadsPerGroup and GroupsPerDevice
+   */
+  int threadsPerGroup;
+
   if (thread_limit > 0) {
     threadsPerGroup = thread_limit;
     DP("Setting threads per block to requested %d\n", thread_limit);
+    // Add master warp if necessary
+    if (KernelInfo->ExecutionMode == GENERIC) {
+      threadsPerGroup += DeviceInfo.WavefrontSize[device_id];
+      DP("Adding master wavefront: +%d threads\n", DeviceInfo.WavefrontSize[device_id]);
+    }
   } else {
     threadsPerGroup = DeviceInfo.NumThreads[device_id];
+    DP("Setting threads per block to default %d\n",
+        DeviceInfo.NumThreads[device_id]);
     if (KernelInfo->ExecutionMode == GENERIC) {
       // Leave room for the master warp which will be added below.
       threadsPerGroup -= DeviceInfo.WavefrontSize[device_id];
-      DP("Preparing %d threads\n", threadsPerGroup);
+      DP("Subtracting master wavefront: -%d threads\n", DeviceInfo.WavefrontSize[device_id]);
     }
-    DP("Setting threads per block to default %d\n",
-        DeviceInfo.NumThreads[device_id]);
-  }
-
-  DP("Preparing %d threads\n", threadsPerGroup);
-
-  // Add master warp if necessary
-  if (KernelInfo->ExecutionMode == GENERIC) {
-    threadsPerGroup += DeviceInfo.WavefrontSize[device_id];
-    DP("Adding master warp: +%d threads\n", DeviceInfo.WavefrontSize[device_id]);
-    DP("Preparing %d threads\n", threadsPerGroup);
   }
 
   if (threadsPerGroup > DeviceInfo.ThreadsPerGroup[device_id]) {
@@ -882,6 +876,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id,
       DP("Threads per block capped at kernel limit %d\n", kernel_limit);
     }
   }
+
   DP("Preparing %d threads\n", threadsPerGroup);
 */
 
@@ -912,8 +907,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id,
     DP("Using requested number of teams %d\n", team_num);
   }
 
-  char *kernel_name = (char *)KernelInfo->Func;
   // Run on the device.
+  char *kernel_name = (char *)KernelInfo->Func;
   DP("Launch kernel %s with %d blocks and %d threads\n", kernel_name, num_groups,
      threadsPerGroup);
 
