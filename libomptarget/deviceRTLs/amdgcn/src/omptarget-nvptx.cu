@@ -39,6 +39,13 @@ INLINE unsigned n_sm() {
 }
 #endif
 
+EXTERN void __kmpc_kernel_init_params(void *Ptr) {
+  PRINT(LD_IO, "call to __kmpc_kernel_init_params with version %f\n",
+        OMPTARGET_NVPTX_VERSION);
+
+  SetTeamsReductionScratchpadPtr(Ptr);
+}
+
 EXTERN void __kmpc_kernel_init(int ThreadLimit,
                                int16_t RequiresOMPRuntime) {
   PRINT(LD_IO, "call to __kmpc_kernel_init with version %f, threadlimit %d\n",
