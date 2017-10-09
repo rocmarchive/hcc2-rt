@@ -217,6 +217,8 @@ public:
     return workDescrForActiveParallel;
   }
   INLINE omp_lock_t *CriticalLock() { return &criticalLock; }
+  INLINE uint64_t *getLastprivateIterBuffer() { return &lastprivateIterBuffer; }
+
   // init
   INLINE void InitTeamDescr();
 
@@ -242,6 +244,7 @@ private:
   omptarget_nvptx_WorkDescr
       workDescrForActiveParallel; // one, ONLY for the active par
   omp_lock_t criticalLock;
+  uint64_t lastprivateIterBuffer;
 
   __align__(16) __kmpc_data_sharing_worker_slot_static worker_rootS[DS_Max_Worker_Warp_Size - 1];
   __align__(16) __kmpc_data_sharing_master_slot_static master_rootS[1];
@@ -340,6 +343,7 @@ extern __device__ __shared__ omptarget_nvptx_ThreadPrivateContext
     *omptarget_nvptx_threadPrivateContext;
 
 extern __device__ __shared__ uint32_t execution_param;
+extern __device__ __shared__ void *ReductionScratchpadPtr;
 
 ////////////////////////////////////////////////////////////////////////////////
 // work function (outlined parallel/simd functions) and arguments.
