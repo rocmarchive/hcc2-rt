@@ -230,3 +230,19 @@ INLINE void named_sync(const int barrier, const int num_threads) {
   asm volatile("bar.sync %0, %1;" : : "r"(barrier), "r"(num_threads) : "memory" );
 }
 #endif
+
+////////////////////////////////////////////////////////////////////////////////
+// Teams Reduction Scratchpad Helpers
+////////////////////////////////////////////////////////////////////////////////
+
+INLINE unsigned int *GetTeamsReductionTimestamp() {
+  return static_cast<unsigned int *>(ReductionScratchpadPtr);
+}
+
+INLINE char *GetTeamsReductionScratchpad() {
+  return static_cast<char *>(ReductionScratchpadPtr) + 256;
+}
+
+INLINE void SetTeamsReductionScratchpadPtr(void *ScratchpadPtr) {
+  ReductionScratchpadPtr = ScratchpadPtr;
+}
