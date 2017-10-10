@@ -813,7 +813,7 @@ int32_t __tgt_rtl_data_delete(int device_id, void* tgt_ptr) {
 }
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
-    void **tgt_args, ptrdiff_t *Offsets, int32_t arg_num, int32_t team_num,
+    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t team_num,
     int32_t thread_limit, uint64_t loop_tripcount) {
 
   // atmi_status_t err;
@@ -827,13 +827,15 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   // All args are references.
   // Allocate one more pointer for the reduction scratchpad.
   std::vector<void *> args(arg_num + 1);
+  std::vector<void *> ptrs(arg_num + 1);
   std::vector<size_t> arg_sizes(arg_num + 1);
 
   DP("Arg_num: %d\n", arg_num);
   for (int32_t i = 0; i < arg_num; ++i) {
-    args[i] = &tgt_args[i];
+    ptrs[i] = (void *)((intptr_t)tgt_args[i] + tgt_offsets[i]);
+    args[i] = &ptrs[i];
     arg_sizes[i] = sizeof(void *);
-    DP("Arg[%d]: %p, size: %lu\n", i, tgt_args[i], sizeof(tgt_args[i]));
+    DP("Offseted base: arg[%d]:" DPxMOD "\n", i, DPxPTR(ptrs[i]));
   }
 
   // ??? this line is added in commit 56d2dd45
@@ -961,14 +963,14 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 }
 
 int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-    void **tgt_args, ptrdiff_t *Offsets, int32_t arg_num)
+    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num)
 {
   // use one team and one thread
   // fix thread num
   int32_t team_num = 1;
   int32_t thread_limit = 0; // use default
   return __tgt_rtl_run_target_team_region(device_id,
-      tgt_entry_ptr, tgt_args, Offsets, arg_num, team_num, thread_limit, 0);
+      tgt_entry_ptr, tgt_args, tgt_offsets, arg_num, team_num, thread_limit, 0);
 }
 
 #ifdef __cplusplus
