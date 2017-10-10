@@ -5,7 +5,7 @@
 #
 # Written by Greg Rodgers Gregory.Rodgers@amd.com
 
-PROGVERSION=0.3-7
+PROGVERSION=0.4-0
 
 # Copyright (c) 2016 ADVANCED MICRO DEVICES, INC.  
 # 
@@ -185,8 +185,8 @@ if [ "$VENDOR" == "AMD" ] ; then
 fi
 if [ "$thisname" == "" ] ; then
    if [ -f "/sys/devices/virtual/kfd/kfd/topology/nodes/1/properties" ] ; then
-      thisname=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/1/properties | grep device_id | cut -d" " -f2 | xargs printf "%x\n"`
-      if [ "$thisname" == "6863" ] ; then
+      thisname=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/*/properties | grep device_id | cut -d" " -f2 | grep -v "^0" | sort -u |  xargs printf "%x\n"`
+      if [ "$thisname" == "6863" ] || [ "$thisname" == "6860" ] ; then
          thisname="vega"
       else
          if [ "$thisname" == "7300" ] ; then
