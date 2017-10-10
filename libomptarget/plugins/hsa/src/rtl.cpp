@@ -702,6 +702,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
            "NumReductionVars 0, ReductionVarsSize 0\n", CPName);
      }
 
+     check("Loading computation property", err);
+
      KernelsList.push_back(KernelTy((void *)name_buffer, CP));
 
      __tgt_offload_entry entry = *e;
@@ -752,6 +754,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
        // no need to return NULL, consider this is a not a device debug build.
        //return NULL;
      }
+
+     check("Sending device environment", err);
    }
 
    return DeviceInfo.getOffloadEntriesTable(device_id);
