@@ -7,16 +7,16 @@
 #include <stdlib.h>
 #include <omp.h>
 #include <assert.h>
-#include <cuda.h>
-#include <cuda_runtime.h>
 
-#define N 1024
+#ifndef USE_PINNED
+  // shoudl be set in the makefile, add here if tested directly
+  #define USE_PINNED 1
+#endif
 
-#define USE_PINNED 1
+#if USE_PINNED
+  #include <cuda.h>
+  #include <cuda_runtime.h>
 
-int *a, *b, *c;
-
-#if USE_PINNED  
   void *AllocMem(size_t memSize) {
     void *hostAddr;
     cudaError_t error;
@@ -40,8 +40,12 @@ int *a, *b, *c;
     hostAddr = malloc(memSize);
     assert(hostAddr);
     return hostAddr;
-
+  }
 #endif
+
+#define N 1024
+
+int *a, *b, *c;
 
 int main() {
   int i, errors;
