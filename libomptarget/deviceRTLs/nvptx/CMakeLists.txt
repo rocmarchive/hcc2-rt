@@ -15,10 +15,11 @@ set(LIBOMPTARGET_NVPTX_ALTERNATE_HOST_COMPILER "" CACHE STRING
   "Path to alternate NVCC host compiler to be used by the NVPTX device RTL.")
   
 if(LIBOMPTARGET_NVPTX_ALTERNATE_HOST_COMPILER)
-  find_program(CUDA_HOST_COMPILER NAMES ${LIBOMPTARGET_NVPTX_ALTERNATE_HOST_COMPILER})
-  if(NOT CUDA_HOST_COMPILER)
+  find_program(ALTERNATE_CUDA_HOST_COMPILER NAMES ${LIBOMPTARGET_NVPTX_ALTERNATE_HOST_COMPILER})
+  if(NOT ALTERNATE_CUDA_HOST_COMPILER)
     libomptarget_say("Not building CUDA offloading device RTL: invalid NVPTX alternate host compiler.")
   endif()
+  set(CUDA_HOST_COMPILER ${ALTERNATE_CUDA_HOST_COMPILER} CACHE FILEPATH "" FORCE)
 endif()
 
 # We can't use clang as nvcc host preprocessor, so we attempt to replace it with
