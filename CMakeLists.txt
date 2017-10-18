@@ -21,4 +21,3 @@ option(OPENMP_ENABLE_LIBOMPTARGET "Enable building libomptarget for offloading."
 if (OPENMP_ENABLE_LIBOMPTARGET)
   add_subdirectory(libomptarget)
 endif()
-
