@@ -1290,9 +1290,9 @@ EXTERN void __kmpc_spmd_kernel_deinit();
 EXTERN void __kmpc_kernel_prepare_parallel(void *WorkFn, int16_t IsOMPRuntimeInitialized);
 EXTERN bool __kmpc_kernel_parallel(void **WorkFn, int16_t IsOMPRuntimeInitialized);
 EXTERN void __kmpc_kernel_end_parallel();
-EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, bool *IsFinal, int32_t *LaneSource);
+EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, uint32_t Mask, bool *IsFinal, int32_t *LaneSource);
 EXTERN void __kmpc_kernel_end_convergent_parallel(void *buffer);
-EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, bool *IsFinal, int32_t *LaneSource,
+EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, uint32_t Mask, bool *IsFinal, int32_t *LaneSource,
                                           int32_t *LaneId, int32_t *NumLanes);
 EXTERN void __kmpc_kernel_end_convergent_simd(void *buffer);
 
