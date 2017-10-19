@@ -284,11 +284,9 @@ EXTERN void __kmpc_kernel_prepare_parallel(void *WorkFn, int16_t IsOMPRuntimeIni
   // CudaThreadsAvail is the number of workers available in this
   // kernel instance and is greater than or equal to
   // currTaskDescr->ThreadLimit().
-  // We allow any number of workers < warpSize since these can
-  // be synchronized in Volta.
-  if (CudaThreadsForParallel > warpSize &&
-        CudaThreadsForParallel < CudaThreadsAvail) {
-    CudaThreadsForParallel = CudaThreadsForParallel & ~((uint16_t)warpSize - 1);
+  if (CudaThreadsForParallel < CudaThreadsAvail) {
+    CudaThreadsForParallel = (CudaThreadsForParallel < warpSize) ? 1 :
+      CudaThreadsForParallel & ~((uint16_t)warpSize - 1);
   }
 #endif
 

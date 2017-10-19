@@ -707,13 +707,9 @@ INLINE void syncWorkersInGenericMode(uint32_t NumThreads) {
   // On Volta and newer architectures we require that all lanes in
   // a warp (at least, all present for the kernel launch) participate in the
   // barrier.  This is enforced when launching the parallel region.  An
-  // exception is when there are < warpSize workers.  In this case use syncwarp().
-  if (NumThreads <= warpSize) {
-    assert (warpSize == 32);
-    uint32_t mask = NumThreads == warpSize ? 0 : 1u << NumThreads;
-    mask -= 1;
-    __syncwarp(mask);
-  } else {
+  // exception is when there are < warpSize workers.  In this case only 1 worker
+  // is started, so we don't need a barrier.
+  if (NumThreads > 1) {
 #endif
     named_sync(L1_BARRIER, warpSize * NumWarps);
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700

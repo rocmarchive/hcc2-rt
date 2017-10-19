@@ -50,15 +50,9 @@ EXTERN void __kmpc_barrier(kmp_Indent *loc_ref, int32_t tid) {
     // On Volta and newer architectures we require that all lanes in
     // a warp (at least, all present for the kernel launch) participate in the
     // barrier.  This is enforced when launching the parallel region.  An
-    // exception is when there are < warpSize workers.  In this case use syncwarp().
-    if (numberOfActiveOMPThreads <= warpSize) {
-      assert (warpSize == 32);
-      uint32_t mask = numberOfActiveOMPThreads == warpSize ? 0 : 1u << numberOfActiveOMPThreads;
-      mask -= 1;
-      PRINT(LD_SYNC, "call kmpc_barrier with %d omp threads, syncwarp parameter %x\n",
-            numberOfActiveOMPThreads, mask);
-      __syncwarp(mask);
-    } else {
+    // exception is when there are < warpSize workers.  In this case only 1 worker
+    // is started, so we don't need a barrier.
+    if (numberOfActiveOMPThreads > 1) {
 #endif
       // The #threads parameter must be rounded up to the warpSize.
       int threads = warpSize * ((numberOfActiveOMPThreads + warpSize - 1) / warpSize);
@@ -68,7 +62,7 @@ EXTERN void __kmpc_barrier(kmp_Indent *loc_ref, int32_t tid) {
       // Barrier #1 is for synchronization among active threads.
       named_sync(L1_BARRIER, threads);
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
-    } // numberOfActiveOMPThreads <= warpSize
+    } // numberOfActiveOMPThreads > 1
 #endif
   }
   PRINT0(LD_SYNC, "completed kmpc_barrier\n");
