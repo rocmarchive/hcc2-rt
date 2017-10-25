@@ -89,6 +89,8 @@ int32_t __kmpc_reduce_simd(kmp_Indent *loc) {
   }
 }
 
+/**
+to be removed
 EXTERN
 int32_t __kmpc_reduce41(kmp_Indent *loc, int32_t global_tid, int32_t num_vars,
                         size_t reduce_size, void *reduce_data,
@@ -97,6 +99,7 @@ int32_t __kmpc_reduce41(kmp_Indent *loc, int32_t global_tid, int32_t num_vars,
   return __kmpc_reduce_gpu(loc, global_tid, num_vars, reduce_size, reduce_data,
                            reduce_array_size, reductFct, lck);
 }
+*/
 
 EXTERN
 void __kmpc_nvptx_end_reduce(int32_t global_tid) {}
@@ -292,6 +295,15 @@ INLINE __device__ void dc_div(double complex *lhs, double complex rhs) {
     asm("trap;");                                                              \
     return;                                                                    \
   }                                                                            \
+  EXTERN double _Complex  __kmpc_atomic_cmplx8_##_op##_cpt(kmp_Indent *id_ref, \
+					 int32_t gtid, 	                       \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs,                  \
+					 int flag) {                           \
+    printf("Double complex atomic operation not supported\n");                 \
+    asm("trap;");                                                              \
+    return rhs;                                                                \
+  }                                                                            \
   EXTERN double _Complex __gpu_warpBlockRedu_cmplx8_##_op(                     \
       double _Complex rhs) {                                                   \
     __shared__ double _Complex lhs;                                            \
@@ -307,32 +319,31 @@ INLINE __device__ void dc_div(double complex *lhs, double complex rhs) {
     return lhs;                                                                \
   }
 
-// implementation with shared
-#define ATOMIC_GENOP_DC_obsolete(_op)                                          \
-  EXTERN void __kmpc_atomic_cmplx16_##_op(kmp_Indent *id_ref, int32_t gtid,    \
-                                          double _Complex *lhs,                \
-                                          double _Complex rhs) {               \
-    __shared__ unsigned int stepinblock;                                       \
-    unsigned tnum = __ACTIVEMASK();                                               \
-    if (tnum != (~0x0)) {                                                      \
-      return;                                                                  \
-    }                                                                          \
-    if (threadIdx.x == 0)                                                      \
-      stepinblock = 0;                                                         \
-    __syncthreads();                                                           \
-    while (stepinblock < blockDim.x) {                                         \
-      if (threadIdx.x == stepinblock) {                                        \
-        dc_##_op(lhs, rhs);                                                    \
-        stepinblock++;                                                         \
-      }                                                                        \
-      __syncthreads();                                                         \
-    }                                                                          \
-  }
+#define ATOMIC_GENOP_DC_REV(_op)                                               \
+  EXTERN void __kmpc_atomic_cmplx8_##_op##_rev(kmp_Indent *id_ref, int32_t gtid, \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs) {                \
+    printf("Double complex atomic operation not supported\n");                 \
+    asm("trap;");                                                              \
+    return;                                                                    \
+  }                                                                            \
+  EXTERN double _Complex  __kmpc_atomic_cmplx8_##_op##_cpt_rev(                \
+					 kmp_Indent *id_ref, 		       \
+					 int32_t gtid, 	                       \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs,                  \
+					 int flag) {                           \
+    printf("Double complex atomic operation not supported\n");                 \
+    asm("trap;");                                                              \
+    return rhs;                                                                \
+  }                                                                            
 
 ATOMIC_GENOP_DC(add);
 ATOMIC_GENOP_DC(sub);
 ATOMIC_GENOP_DC(mul);
 ATOMIC_GENOP_DC(div);
+ATOMIC_GENOP_DC_REV(sub)
+ATOMIC_GENOP_DC_REV(div)
 
 INLINE __device__ uint64_t fc_add(float r1, float i1, float r2, float i2) {
   uint64_t result;
@@ -621,6 +632,8 @@ INLINE __device__ OpType Compute(OpType a,
   return res;
 }
 
+
+/* specialize the template to avoid the switch at runtime */
 template <>
 INLINE __device__ float Compute<float, omptarget_nvptx_add>(float a, float b) {
   return a + b;
@@ -882,14 +895,11 @@ EXTERN int64_t __kmpc_shuffle_int64(int64_t val, int16_t delta, int16_t size) {
 template <typename T, omptarget_nvptx_BINOP_t binop>
 __inline__ __device__ T reduInitVal() {
   switch (binop) {
-  case omptarget_nvptx_inc:
-  case omptarget_nvptx_dec:
-  case omptarget_nvptx_add:
-  case omptarget_nvptx_sub:
-  case omptarget_nvptx_sub_rev:
-    return (T)0;
   case omptarget_nvptx_mul:
   case omptarget_nvptx_div:
+  case omptarget_nvptx_div_rev:
+  case omptarget_nvptx_andl:
+  case omptarget_nvptx_andb:
     return (T)1;
   default:
     return (T)0;
