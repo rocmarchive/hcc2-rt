@@ -288,7 +288,12 @@ public:
   }
 
   INLINE void InitThreadPrivateContext(int tid);
-
+  INLINE void SetSourceQueue(uint64_t Src) {
+    SourceQueue = Src;
+  }
+  INLINE uint64_t GetSourceQueue() {
+    return SourceQueue;
+  }
 private:
   // team context for this team
   omptarget_nvptx_TeamDescr teamContext;
@@ -312,6 +317,8 @@ private:
   // state for dispatch with dyn/guided OR static (never use both at a time)
   Counter currEvent_or_nextLowerBound[MAX_THREADS_PER_TEAM];
   Counter eventsNum_or_stride[MAX_THREADS_PER_TEAM];
+  // Queue to which this object must be returned.
+  uint64_t SourceQueue;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
