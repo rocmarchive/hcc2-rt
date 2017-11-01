@@ -477,19 +477,6 @@ static bool device_is_ready(int64_t device_num) {
   return true;
 }
 
-#ifdef OMPTARGET_DEBUG
-static void display_entries(const char * msg, int64_t device_id, int32_t arg_num,
-    void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types) {
-
-  DP("On device %ld, %s ...\n", device_id, msg);
-  for (int i=0; i<arg_num; ++i) {
-    DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
-        ", Type=0x%" PRIx64 "\n", i, DPxPTR(args_base[i]), DPxPTR(args[i]),
-        arg_sizes[i], arg_types[i]);
-  }
-}
-#endif
-
 ////////////////////////////////////////////////////////////////////////////////
 // Target API functions
 //
@@ -1625,8 +1612,11 @@ EXTERN void __tgt_target_data_begin(int64_t device_id, int32_t arg_num,
   DeviceTy& Device = Devices[device_id];
 
 #ifdef OMPTARGET_DEBUG
-  display_entries("_tgt_target_data_begin entries", device_id, arg_num,
-      args_base, args, arg_sizes, arg_types);
+  for (int i=0; i<arg_num; ++i) {
+    DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
+        ", Type=0x%" PRIx64 "\n", i, DPxPTR(args_base[i]), DPxPTR(args[i]),
+        arg_sizes[i], arg_types[i]);
+  }
 #endif
 
   target_data_begin(Device, arg_num, args_base, args, arg_sizes, arg_types);
@@ -1784,8 +1774,11 @@ EXTERN void __tgt_target_data_end(int64_t device_id, int32_t arg_num,
   }
 
 #ifdef OMPTARGET_DEBUG
-  display_entries("_tgt_target_data_end entries", device_id, arg_num,
-      args_base, args, arg_sizes, arg_types);
+  for (int i=0; i<arg_num; ++i) {
+    DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
+        ", Type=0x%" PRIx64 "\n", i, DPxPTR(args_base[i]), DPxPTR(args[i]),
+        arg_sizes[i], arg_types[i]);
+  }
 #endif
 
   target_data_end(Device, arg_num, args_base, args, arg_sizes, arg_types);
@@ -2103,8 +2096,11 @@ EXTERN int __tgt_target(int64_t device_id, void *host_ptr, int32_t arg_num,
   }
 
 #ifdef OMPTARGET_DEBUG
-  display_entries("_tgt_target entries", device_id, arg_num,
-      args_base, args, arg_sizes, arg_types);
+  for (int i=0; i<arg_num; ++i) {
+    DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
+        ", Type=0x%" PRIx64 "\n", i, DPxPTR(args_base[i]), DPxPTR(args[i]),
+        arg_sizes[i], arg_types[i]);
+  }
 #endif
 
   int rc = target(device_id, host_ptr, arg_num, args_base, args, arg_sizes,
@@ -2140,8 +2136,11 @@ EXTERN int __tgt_target_teams(int64_t device_id, void *host_ptr,
   }
 
 #ifdef OMPTARGET_DEBUG
-  display_entries("_tgt_target_teams entries", device_id, arg_num,
-      args_base, args, arg_sizes, arg_types);
+  for (int i=0; i<arg_num; ++i) {
+    DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
+        ", Type=0x%" PRIx64 "\n", i, DPxPTR(args_base[i]), DPxPTR(args[i]),
+        arg_sizes[i], arg_types[i]);
+  }
 #endif
 
   int rc = target(device_id, host_ptr, arg_num, args_base, args, arg_sizes,
