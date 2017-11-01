@@ -138,7 +138,10 @@ struct KernelTy {
 
   KernelTy(ATMIfunction _Func, TargetKernelCompProperties _CP) : Func(_Func),
       ExecutionMode(_CP.ExecutionMode), NumReductionVars(_CP.NumReductionVars),
-          ReductionVarsSize(_CP.ReductionVarsSize) {}
+          ReductionVarsSize(_CP.ReductionVarsSize) {
+            DP("Construct kernelinfo: ExecMode %d, NumReductionVars %d, ReductionVarsSize, %d\n",
+                ExecutionMode, NumReductionVars, ReductionVarsSize);
+          }
 };
 
 /// List that contains all the kernels.
