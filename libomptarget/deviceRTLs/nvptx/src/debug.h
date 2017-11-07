@@ -273,4 +273,8 @@
 
 #endif
 
+// print current state
+NOINLINE void PrintTaskDescr(omptarget_nvptx_TaskDescr *taskDescr, char *title,
+                             int level);
+
 #endif

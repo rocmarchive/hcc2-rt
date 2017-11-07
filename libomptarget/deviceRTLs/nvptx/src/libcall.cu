@@ -13,8 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "omptarget-nvptx.h"
-NOINLINE void PrintTaskDescr(omptarget_nvptx_TaskDescr *taskDescr, char *title,
-    int level);
+
 #define TICK ((double) 1.0 / 745000000.0)
 
 EXTERN double omp_get_wtick(void) {
