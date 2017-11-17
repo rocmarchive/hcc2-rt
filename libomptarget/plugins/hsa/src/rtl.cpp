@@ -863,8 +863,9 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     threadsPerGroup = DeviceInfo.NumThreads[device_id];
     DP("Setting threads per block to default %d\n",
         DeviceInfo.NumThreads[device_id]);
-    if (KernelInfo->ExecutionMode == GENERIC) {
+    if (0 && KernelInfo->ExecutionMode == GENERIC) {
       // Leave room for the master warp which will be added below.
+      // ??? we do not add this back any more, is this abstraction required?
       threadsPerGroup -= DeviceInfo.WavefrontSize[device_id];
       DP("Subtracting master wavefront: -%d threads\n", DeviceInfo.WavefrontSize[device_id]);
     }
