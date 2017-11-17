@@ -308,7 +308,7 @@ public:
 void RTLsTy::LoadRTLs() {
 #ifdef OMPTARGET_DEBUG
   if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
-    DebugLevel = std::stoi(envStr);
+    DebugLevel = std::stoi(envStr); 
   }
   if (!DebugLevel) {
     if (char *envStr = getenv("OFFLOAD_DEBUG")) {
@@ -2031,9 +2031,6 @@ static int target(int64_t device_id, void *host_ptr, int32_t arg_num,
     tgt_args.push_back(TgtPtrBegin);
     tgt_offsets.push_back(TgtBaseOffset);
   }
-  // Push omp handle.
-  tgt_args.push_back((void *)0);
-  tgt_offsets.push_back(0);
 
   assert(tgt_args.size() == tgt_offsets.size() &&
       "Size mismatch in arguments and offsets");

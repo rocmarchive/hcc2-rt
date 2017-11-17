@@ -199,9 +199,6 @@ public:
 
   INLINE static void dispatch_init(kmp_sched_t schedule, T lb, T ub, ST st,
                                    ST chunk) {
-    ASSERT0(LT_FUSSY, lb == 0, "exected normalized loop");
-    lb = 0;
-
     int tid = GetLogicalThreadIdInBlock();
     omptarget_nvptx_TaskDescr *currTaskDescr = getMyTopTaskDescriptor(tid);
     T tnum = currTaskDescr->ThreadsInTeam();
@@ -211,6 +208,16 @@ public:
         GetOmpThreadId(tid, isSPMDMode(), isRuntimeUninitialized()) <
             GetNumberOfOmpThreads(tid, isSPMDMode(), isRuntimeUninitialized()),
         "current thread is not needed here; error");
+
+    /* Currently just ignore the monotonic and non-monotonic modifiers
+     * (the compiler isn't producing them * yet anyway).
+     * When it is we'll want to look at them somewhere here and use that
+     * information to add to our schedule choice. We shouldn't need to pass
+     * them on, they merely affect which schedule we can legally choose for
+     * various dynamic cases. (In paritcular, whether or not a stealing scheme
+     * is legal).
+     */
+    schedule = SCHEDULE_WITHOUT_MODIFIERS(schedule);
 
     // Process schedule.
     if (tnum == 1 || tripCount <= 1 || OrderedSchedule(schedule)) {
@@ -693,6 +700,24 @@ EXTERN void __kmpc_for_static_fini(kmp_Indent *loc, int32_t global_tid) {
   PRINT0(LD_IO, "call kmpc_for_static_fini\n");
 }
 
+namespace {
+INLINE void syncWorkersInGenericMode(uint32_t NumThreads) {
+  int NumWarps = ((NumThreads + warpSize - 1) / warpSize);
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+  // On Volta and newer architectures we require that all lanes in
+  // a warp (at least, all present for the kernel launch) participate in the
+  // barrier.  This is enforced when launching the parallel region.  An
+  // exception is when there are < warpSize workers.  In this case only 1 worker
+  // is started, so we don't need a barrier.
+  if (NumThreads > 1) {
+#endif
+    named_sync(L1_BARRIER, warpSize * NumWarps);
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+  }
+#endif
+}
+};
+
 EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
   int32_t varNum, void *array) {
   PRINT0(LD_IO, "call to __kmpc_reduce_conditional_lastprivate(...)\n");
@@ -702,7 +727,6 @@ EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
                            isRuntimeUninitialized());
   uint32_t NumThreads = GetNumberOfOmpThreads(GetLogicalThreadIdInBlock(),
       isSPMDMode(), isRuntimeUninitialized());
-  int NumWarps = ((NumThreads + warpSize - 1) / warpSize);
   uint64_t *Buffer = teamDescr.getLastprivateIterBuffer();
   for (unsigned i = 0; i < varNum; i++) {
     // Reset buffer.
@@ -710,7 +734,7 @@ EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
       *Buffer = 0;  // Reset to minimum loop iteration value.
 
     // Barrier.
-    named_sync(L1_BARRIER, warpSize * NumWarps);
+    syncWorkersInGenericMode(NumThreads);
 
     // Atomic max of iterations.
     uint64_t *varArray = (uint64_t *) array;
@@ -718,13 +742,12 @@ EXTERN void __kmpc_reduce_conditional_lastprivate(kmp_Indent *loc, int32_t gtid,
     (void) atomicMax((unsigned long long int *) Buffer, (unsigned long long int) elem);
 
     // Barrier.
-    __threadfence_block();
-    named_sync(L1_BARRIER, warpSize * NumWarps);
+    syncWorkersInGenericMode(NumThreads);
 
     // Read max value and update thread private array.
     varArray[i] = *Buffer;
 
     // Barrier.
-    named_sync(L1_BARRIER, warpSize * NumWarps);
+    syncWorkersInGenericMode(NumThreads);
   }
 }
