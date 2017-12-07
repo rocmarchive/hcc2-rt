@@ -935,6 +935,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     __tgt_rtl_data_submit(device_id, Scratchpad, &timestamp, sizeof(unsigned));
   }
   args[arg_num] = &Scratchpad;
+  arg_sizes[arg_num] = sizeof(void *);
 
   // Run on the device.
   char *kernel_name = (char *)KernelInfo->Func;
@@ -943,7 +944,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 
   atmi_kernel_t kernel;
   const int GPU_IMPL = 42;
-  atmi_kernel_create_empty(&kernel, arg_num, &arg_sizes[0]);
+  atmi_kernel_create_empty(&kernel, arg_num + 1, &arg_sizes[0]);
   atmi_kernel_add_gpu_impl(kernel, kernel_name, GPU_IMPL);
 
   ATMI_LPARM_1D(lparm, num_groups*threadsPerGroup);
