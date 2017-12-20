@@ -99,6 +99,8 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
     "Enable CUDA LLVM bitcode offloading device RTL.")
   if (${LIBOMPTARGET_NVPTX_ENABLE_BCLIB})
 
+    libomptarget_say("Building Architecture specific device bc libs")
+
     # Find a clang compiler capable of compiling cuda files to LLVM bitcode and
     # an llvm linker.
     # We use the one provided for the user, attempt to use the
@@ -144,6 +146,8 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
     if(NOT LIBOMPTARGET_NVPTX_SELECTED_CUDA_COMPILER)
       libomptarget_say("Cannot find a CUDA compiler capable of emitting LLVM bitcode.")
       libomptarget_say("Please configure with flag -DLIBOMPTARGET_NVPTX_CUDA_COMPILER")
+    else()
+      libomptarget_say("CUDA COMPILER: ${LIBOMPTARGET_NVPTX_SELECTED_CUDA_COMPILER}")
     endif()
     if(NOT LIBOMPTARGET_NVPTX_SELECTED_BC_LINKER)
       libomptarget_say("Cannot find a linker capable of linking LLVM bitcode objects.")
@@ -184,56 +188,57 @@ if(LIBOMPTARGET_DEP_CUDA_FOUND)
       set(CUDA_INCLUDES -I/usr/include/powerpc64le-linux-gnu)
 
       # Get all the compute capabilities the user requested or use SM_35 by default.
+      if(NOT nvptx_sm_list)
+        set(nvptx_sm_list "35")
+      endif()
       set(CUDA_ARCH "")
-      if(nvptx_sm_list)
-        foreach(sm ${nvptx_sm_list})
-          set(CUDA_ARCH ${CUDA_ARCH} --cuda-gpu-arch=sm_${sm})
-        endforeach()
-      else()
-        set(CUDA_ARCH --cuda-gpu-arch=sm_35)
-      endif()
+      foreach(sm ${nvptx_sm_list})
+        set(CUDA_ARCH --cuda-gpu-arch=sm_${sm})
+        libomptarget_say("CUDA ARCH : ${CUDA_ARCH}")
+        # Compile cuda files to bitcode.
+        set(bc_files "")
+        foreach(src ${cuda_src_files})
+          get_filename_component(infile ${src} ABSOLUTE)
+          get_filename_component(outfile ${src} NAME)
+          set(sm_bc_file ${outfile}-sm_${sm}.bc)
+          add_custom_command(OUTPUT ${sm_bc_file} 
+            COMMAND ${LIBOMPTARGET_NVPTX_SELECTED_CUDA_COMPILER} ${CUDA_FLAGS} ${CUDA_ARCH} ${CUDA_INCLUDES}
+              -c ${infile} -o ${sm_bc_file}
+            DEPENDS ${infile} ${LIBOMPTARGET_NVPTX_SELECTED_CUDA_COMPILER_FROM_TREE}
+            IMPLICIT_DEPENDS CXX ${infile}
+            COMMENT "Building LLVM bitcode ${outfile}.bc"
+            VERBATIM
+          )
+          set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${outfile}.bc)
+          list(APPEND bc_files ${sm_bc_file})
+        endforeach() # end for each cuda source file
 
-      # Compile cuda files to bitcode.
-      set(bc_files "")
-      foreach(src ${cuda_src_files})
-        get_filename_component(infile ${src} ABSOLUTE)
-        get_filename_component(outfile ${src} NAME)
-
-        add_custom_command(OUTPUT ${outfile}.bc
-          COMMAND ${LIBOMPTARGET_NVPTX_SELECTED_CUDA_COMPILER} ${CUDA_FLAGS} ${CUDA_ARCH} ${CUDA_INCLUDES}
-            -c ${infile} -o ${outfile}.bc
-          DEPENDS ${infile} ${LIBOMPTARGET_NVPTX_SELECTED_CUDA_COMPILER_FROM_TREE}
-          IMPLICIT_DEPENDS CXX ${infile}
-          COMMENT "Building LLVM bitcode ${outfile}.bc"
-          VERBATIM
-        )
-        set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${outfile}.bc)
-
-        list(APPEND bc_files ${outfile}.bc)
-      endforeach()
-
-      # Link to a bitcode library.
-      add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx.bc
-          COMMAND ${LIBOMPTARGET_NVPTX_SELECTED_BC_LINKER}
-            -o ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx.bc ${bc_files}
+        # Link to sm-specific a bitcode library.
+        set(target_sm_nvptx libomptarget-nvptx-sm_${sm})
+        set(rel_sm_nvptx_file libomptarget-nvptx-sm_${sm}.bc)
+        set(sm_nvptx_file ${CMAKE_CURRENT_BINARY_DIR}/${rel_sm_nvptx_file})
+        add_custom_command(OUTPUT ${sm_nvptx_file}
+            COMMAND ${LIBOMPTARGET_NVPTX_SELECTED_BC_LINKER}
+            -o ${sm_nvptx_file} ${bc_files}
           DEPENDS ${bc_files} ${LIBOMPTARGET_NVPTX_SELECTED_BC_LINKER_FROM_TREE}
-          COMMENT "Linking LLVM bitcode libomptarget-nvptx.bc"
-      )
-      set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES libomptarget-nvptx.bc)
+          COMMENT "Linking LLVM bitcode ${rel_sm_nvptx_file}"
+        )
+        set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${rel_sm_nvptx_file})
 
-      add_custom_target(omptarget-nvptx-bc ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx.bc)
+        add_custom_target(${target_sm_nvptx} ALL DEPENDS ${sm_nvptx_file})
 
-      # Copy library to destination.
-      add_custom_command(TARGET omptarget-nvptx-bc POST_BUILD
-                         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx.bc
-                         $<TARGET_FILE_DIR:omptarget-nvptx>)
+        # Copy library to destination.
+        # add_custom_command(TARGET ${target_sm_nvptx} POST_BUILD
+        #                 COMMAND ${CMAKE_COMMAND} -E copy ${sm_nvptx_file}
+        #                 $<TARGET_FILE_DIR:${target_sm_nvptx}>)
 
-      # Install device RTL under the lib destination folder.
-      if(CMAKE_BUILD_TYPE MATCHES Debug)
-        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx.bc DESTINATION "lib-debug")
-      else()
-        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libomptarget-nvptx.bc DESTINATION "lib")
-      endif()
+        # Install device RTL under the lib destination folder.
+        if(CMAKE_BUILD_TYPE MATCHES Debug)
+          install(FILES ${sm_nvptx_file} DESTINATION "lib-debug/libdevice")
+        else()
+          install(FILES ${sm_nvptx_file} DESTINATION "lib/libdevice")
+        endif()
+      endforeach() # end for each sm 
 
     endif()
   endif()
