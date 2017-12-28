@@ -690,7 +690,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   // All args are references.
   // Allocate one more pointer for the reduction scratchpad.
   std::vector<void *> args(arg_num + 1);
-  std::vector<void *> ptrs(arg_num + 1);
+  std::vector<void *> ptrs(arg_num);
 
   DP("Arg_num: %d\n", arg_num);
   for (int32_t i = 0; i < arg_num; ++i) {

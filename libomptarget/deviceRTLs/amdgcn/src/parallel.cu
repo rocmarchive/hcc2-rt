@@ -44,28 +44,30 @@ typedef struct ConvergentSimdJob {
 ////////////////////////////////////////////////////////////////////////////////
 // support for convergent simd (team of threads in a warp only)
 ////////////////////////////////////////////////////////////////////////////////
-EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, bool *IsFinal, int32_t *LaneSource,
-                                          int32_t *LaneId, int32_t *NumLanes) {
-  PRINT0(LD_IO, "call to __kmpc_kernel_convergent_simd\n");
 #ifdef __AMDGCN__
-  uint64_t ConvergentMask = __ballot64(true);
+EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, uint64_t Mask, bool *IsFinal,
+                                          int32_t *LaneSource, int32_t *LaneId,
+                                          int32_t *NumLanes) {
+  PRINT0(LD_IO, "call to __kmpc_kernel_convergent_simd\n");
+  uint64_t ConvergentMask = Mask;
   int32_t  ConvergentSize = __popcll(ConvergentMask);
   uint64_t WorkRemaining  = ConvergentMask >> (*LaneSource+1);
   *LaneSource += __ffsll(WorkRemaining);
   *IsFinal = __popcll(WorkRemaining) == 1;
   uint64_t lanemask_lt;
+  lanemask_lt = __lanemask_lt();
+  *LaneId = __popcll(ConvergentMask & lanemask_lt);
 #else
-  uint32_t ConvergentMask = __ballot(true);
+EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, uint32_t Mask, bool *IsFinal,
+                                          int32_t *LaneSource, int32_t *LaneId,
+                                          int32_t *NumLanes) {
+  PRINT0(LD_IO, "call to __kmpc_kernel_convergent_simd\n");
+  uint32_t ConvergentMask = Mask;
   int32_t  ConvergentSize = __popc(ConvergentMask);
   uint32_t WorkRemaining  = ConvergentMask >> (*LaneSource+1);
   *LaneSource += __ffs(WorkRemaining);
   *IsFinal = __popc(WorkRemaining) == 1;
   uint32_t lanemask_lt;
-#endif
-#ifdef __AMDGCN__
-  lanemask_lt = __lanemask_lt();
-  *LaneId = __popcll(ConvergentMask & lanemask_lt);
-#else
   asm("mov.u32 %0, %%lanemask_lt;" : "=r"(lanemask_lt));
   *LaneId = __popc(ConvergentMask & lanemask_lt);
 #endif
@@ -78,7 +80,7 @@ EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, bool *IsFinal, int32_t *
     omptarget_nvptx_threadPrivateContext->SimdLimitForNextSimd(threadId);
   job->slimForNextSimd = SimdLimit;
 
-  int32_t SimdLimitSource = __shfl(SimdLimit, *LaneSource);
+  int32_t SimdLimitSource = __SHFL_SYNC(Mask, SimdLimit, *LaneSource);
   // reset simdlimit to avoid propagating to successive #simd
   if (SimdLimitSource > 0 && threadId == sourceThreadId)
     omptarget_nvptx_threadPrivateContext->SimdLimitForNextSimd(
@@ -112,7 +114,7 @@ EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, bool *IsFinal, int32_t *
 }
 
 EXTERN void __kmpc_kernel_end_convergent_simd(void *buffer) {
-  PRINT0(LD_IO | LD_PAR, "call to __kmpc_kernel_end_convergent_parallel\n");
+  PRINT0(LD_IO | LD_PAR, "call to __kmpc_kernel_end_convergent_simd\n");
   // pop stack
   int threadId = GetLogicalThreadIdInBlock();
   ConvergentSimdJob *job = (ConvergentSimdJob *) buffer;
@@ -131,27 +133,26 @@ typedef struct ConvergentParallelJob {
 ////////////////////////////////////////////////////////////////////////////////
 // support for convergent parallelism (team of threads in a warp only)
 ////////////////////////////////////////////////////////////////////////////////
-EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, bool *IsFinal, int32_t *LaneSource) {
-  PRINT0(LD_IO, "call to __kmpc_kernel_convergent_parallel\n");
 #ifdef __AMDGCN__
-  uint64_t ConvergentMask = __ballot64(true);
+EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, uint64_t Mask, bool *IsFinal, int32_t *LaneSource) {
+  PRINT0(LD_IO, "call to __kmpc_kernel_convergent_parallel\n");
+  uint64_t ConvergentMask = Mask;
   int32_t  ConvergentSize = __popcll(ConvergentMask);
   uint64_t WorkRemaining  = ConvergentMask >> (*LaneSource+1);
   *LaneSource += __ffsll(WorkRemaining);
   *IsFinal = __popcll(WorkRemaining) == 1;
   uint64_t lanemask_lt;
+  lanemask_lt = __lanemask_lt();
+  uint32_t OmpId = __popcll(ConvergentMask & lanemask_lt);
 #else
-  uint32_t ConvergentMask = __ballot(true);
+EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, uint32_t Mask, bool *IsFinal, int32_t *LaneSource) {
+  PRINT0(LD_IO, "call to __kmpc_kernel_convergent_parallel\n");
+  uint32_t ConvergentMask = Mask;
   int32_t  ConvergentSize = __popc(ConvergentMask);
   uint32_t WorkRemaining  = ConvergentMask >> (*LaneSource+1);
   *LaneSource += __ffs(WorkRemaining);
   *IsFinal = __popc(WorkRemaining) == 1;
   uint32_t lanemask_lt;
-#endif
-#ifdef __AMDGCN__
-  lanemask_lt = __lanemask_lt();
-  uint32_t OmpId = __popcll(ConvergentMask & lanemask_lt);
-#else
   asm("mov.u32 %0, %%lanemask_lt;" : "=r"(lanemask_lt));
   uint32_t OmpId = __popc(ConvergentMask & lanemask_lt);
 #endif
@@ -164,7 +165,7 @@ EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, bool *IsFinal, int32
     omptarget_nvptx_threadPrivateContext->NumThreadsForNextParallel(threadId);
   job->tnumForNextPar = NumThreadsClause;
 
-  int32_t NumThreadsSource = __shfl(NumThreadsClause, *LaneSource);
+  int32_t NumThreadsSource = __SHFL_SYNC(Mask, NumThreadsClause, *LaneSource);
   // reset numthreads to avoid propagating to successive #parallel
   if (NumThreadsSource > 0 && threadId == sourceThreadId)
     omptarget_nvptx_threadPrivateContext->NumThreadsForNextParallel(
@@ -265,6 +266,15 @@ EXTERN void __kmpc_kernel_prepare_parallel(void *WorkFn, int16_t IsOMPRuntimeIni
   // we cannot have more than block size
   uint16_t CudaThreadsAvail = GetNumberOfWorkersInTeam();
 
+  // currTaskDescr->ThreadLimit(): If non-zero, this is the limit as
+  // specified by the thread_limit clause on the target directive.
+  // GetNumberOfWorkersInTeam(): This is the number of workers available
+  // in this kernel instance.
+  //
+  // E.g: If thread_limit is 33, the kernel is launched with 33+32=65
+  // threads.  The last warp is the master warp so in this case
+  // GetNumberOfWorkersInTeam() returns 64.
+
   // this is different from ThreadAvail of OpenMP because we may be
   // using some of the CUDA threads as SIMD lanes
 
@@ -293,8 +303,21 @@ EXTERN void __kmpc_kernel_prepare_parallel(void *WorkFn, int16_t IsOMPRuntimeIni
               ? CudaThreadsAvail
               : currTaskDescr->ThreadLimit() * NumLanes;
     } else
-      CudaThreadsForParallel = GetNumberOfWorkersInTeam();
+      CudaThreadsForParallel = CudaThreadsAvail;
   }
+
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+  // On Volta and newer architectures we require that all lanes in
+  // a warp participate in the parallel region.  Round down to a
+  // multiple of warpSize since it is legal to do so in OpenMP.
+  // CudaThreadsAvail is the number of workers available in this
+  // kernel instance and is greater than or equal to
+  // currTaskDescr->ThreadLimit().
+  if (CudaThreadsForParallel < CudaThreadsAvail) {
+    CudaThreadsForParallel = (CudaThreadsForParallel < warpSize) ? 1 :
+      CudaThreadsForParallel & ~((uint16_t)warpSize - 1);
+  }
+#endif
 
   ASSERT(LT_FUSSY, CudaThreadsForParallel > 0,
          "bad thread request of %d threads", CudaThreadsForParallel);

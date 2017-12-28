@@ -1273,10 +1273,16 @@ EXTERN void __kmpc_kernel_prepare_parallel(void *WorkFn, int16_t IsOMPRuntimeIni
 EXTERN bool __kmpc_kernel_parallel(void **WorkFn, int16_t IsOMPRuntimeInitialized);
 
 EXTERN void __kmpc_kernel_end_parallel();
-EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, bool *IsFinal, int32_t *LaneSource);
-EXTERN void __kmpc_kernel_end_convergent_parallel(void *buffer);
-EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, bool *IsFinal, int32_t *LaneSource,
+#ifdef __AMDGCN__
+EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, uint64_t Mask, bool *IsFinal, int32_t *LaneSource);
+EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, uint64_t Mask, bool *IsFinal, int32_t *LaneSource,
                                           int32_t *LaneId, int32_t *NumLanes);
+#else
+EXTERN bool __kmpc_kernel_convergent_parallel(void *buffer, uint32_t Mask, bool *IsFinal, int32_t *LaneSource);
+EXTERN bool __kmpc_kernel_convergent_simd(void *buffer, uint32_t Mask, bool *IsFinal, int32_t *LaneSource,
+                                          int32_t *LaneId, int32_t *NumLanes);
+#endif
+EXTERN void __kmpc_kernel_end_convergent_parallel(void *buffer);
 EXTERN void __kmpc_kernel_end_convergent_simd(void *buffer);
 
 // The slot used for data sharing by the master and worker threads. We use a complete (default size version and an incomplete one so that we allow sizes greater than the default).
