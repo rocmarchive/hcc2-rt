@@ -242,7 +242,10 @@ EXTERN void __kmpc_kernel_prepare_parallel(void *WorkFn, int16_t IsOMPRuntimeIni
   PRINT0(LD_IO, "call to __kmpc_kernel_prepare_parallel\n");
   omptarget_nvptx_workFn = WorkFn;
 
-  if (!IsOMPRuntimeInitialized) return;
+  if (!IsOMPRuntimeInitialized) {
+    PRINT0(LD_IO | LD_PAR, "return as runtime not initialized\n");
+    return;
+  }
 
   // This routine is only called by the team master.  The team master is
   // the first thread of the last warp.  It always has the logical thread
@@ -277,7 +280,6 @@ EXTERN void __kmpc_kernel_prepare_parallel(void *WorkFn, int16_t IsOMPRuntimeIni
 
   // this is different from ThreadAvail of OpenMP because we may be
   // using some of the CUDA threads as SIMD lanes
-
   int NumLanes = 1;
   if (NumThreadsClause != 0) {
     // reset request to avoid propagating to successive #parallel
@@ -345,10 +347,16 @@ EXTERN bool __kmpc_kernel_parallel(void **WorkFn, int16_t IsOMPRuntimeInitialize
   // Work function and arguments for L1 parallel region.
   *WorkFn   = omptarget_nvptx_workFn;
 
-  if (!IsOMPRuntimeInitialized) return true;
+  if (!IsOMPRuntimeInitialized) {
+    PRINT0(LD_IO | LD_PAR, "return as runtime not initialized\n");
+    return true;
+  }
 
   // If this is the termination signal from the master, quit early.
-  if (!*WorkFn) return false;
+  if (!*WorkFn) {
+    PRINT0(LD_IO | LD_PAR, "return when there is no work\n");
+    return false;
+  }
 
   // Only the worker threads call this routine and the master warp
   // never arrives here.  Therefore, use the nvptx thread id.

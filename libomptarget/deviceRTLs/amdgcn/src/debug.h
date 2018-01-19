@@ -78,7 +78,10 @@
 #ifndef OMPTARGET_NVPTX_DEBUG
 #define OMPTARGET_NVPTX_DEBUG LD_SET_NONE
 #elif OMPTARGET_NVPTX_DEBUG
+// Only print this warning if BUILD_TYPE was not Debug
+// #ifndef OMPTARGET_DEBUG
 // #warning debug is used, not good for measurements
+// #endif
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -211,6 +214,7 @@
 
 #else
 #if OMPTARGET_NVPTX_TEST == LT_SET_SAFETY
+
 #define TON(_flag) ((OMPTARGET_NVPTX_TEST) & (_flag))
 #define ASSERT0(_flag, _cond, _str)                                            \
   {                                                                            \
@@ -224,7 +228,9 @@
       assert(_cond);                                                           \
     }                                                                          \
   }
+
 #elif OMPTARGET_NVPTX_TEST >= LT_SET_INPUT
+
 #define TON(_flag) ((OMPTARGET_NVPTX_TEST) & (_flag))
 #define ASSERT0(_flag, _cond, _str)                                            \
   {                                                                            \
@@ -242,6 +248,7 @@
       assert(_cond);                                                           \
     }                                                                          \
   }
+
 #else
 
 #define TON(_flag) (FALSE)
@@ -285,5 +292,10 @@
 #define WARNING(_flag, _str, _args...)
 
 #endif
+
+// print current state
+class omptarget_nvptx_TaskDescr;
+NOINLINE void PrintTaskDescr(omptarget_nvptx_TaskDescr *taskDescr, char *title,
+                             int level);
 
 #endif

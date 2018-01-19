@@ -41,6 +41,13 @@ __device__ static unsigned getMasterThreadId() {
   return (getNumThreads() - 1) & (~Mask);
 }
 // The lowest ID among the active threads in the warp.
+__device__ static unsigned getWarpMasterActiveThreadId() {
+  unsigned long long Mask = __BALLOT_SYNC(0xFFFFFFFF, true);
+  unsigned long long ShNum = 32 - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
+  unsigned long long Sh = Mask << ShNum;
+  return __popc(Sh);
+}
+// The lowest ID among the active threads in the warp.
 EXTERN int32_t __kmpc_warp_master_active_thread_id() {
 #ifdef __AMDGCN__
   int64_t Mask = __kmpc_warp_active_thread_mask64();
@@ -59,14 +66,9 @@ EXTERN int32_t __kmpc_warp_master_active_thread_id() {
   //PRINT(LD_IO,"__kmpc_warp_master_active_thread_id: tid=%d laneid=%d Shnum=%d RETURN VAL=%d\n", tid, laneid, Shnum, popret);
   return popret;
 #else
-  //unsigned long long Mask = __ballot(true);
-  unsigned long long Mask = __kmpc_warp_active_thread_mask();
-  unsigned long long ShNum = 32 - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
-  unsigned long long Sh = Mask << ShNum;
-  return __popc(Sh);
+  return getWarpMasterActiveThreadId();
 #endif
 }
-
 // Return true if this is the master thread.
 __device__ static bool IsMasterThread() {
   return getMasterThreadId() == getThreadId();
@@ -77,7 +79,7 @@ __device__ static bool IsMasterThread() {
 //}
 // Return true if this is the first active thread in the warp.
 __device__ static bool IsWarpMasterActiveThread() {
-  return (__kmpc_warp_master_active_thread_id() == 0u);
+  return getWarpMasterActiveThreadId() == 0u;
 }
 /// Return the provided size aligned to the size of a pointer.
 __device__ static size_t AlignVal(size_t Val) {
@@ -129,10 +131,6 @@ EXTERN void __kmpc_initialize_data_sharing_environment(
 
   DataSharingState.SlotPtr[WID] = RootS;
   DataSharingState.StackPtr[WID] = (void*)&RootS->Data[0];
-  if (InitialDataSize == 256) { // Only zero for team master
-    DataSharingState.FramePtr[WID] = 0 ;
-    DataSharingState.ActiveThreads[WID] = 0 ;
-  }
 
   // We don't need to initialize the frame and active threads.
 
@@ -173,7 +171,7 @@ EXTERN void* __kmpc_data_sharing_environment_begin(
 #ifdef __AMDGCN__
   unsigned long long CurActiveThreads = __ballot64(true);
 #else
-  unsigned CurActiveThreads = __ballot(true);
+  unsigned CurActiveThreads = __BALLOT_SYNC(0xFFFFFFFF, true);
 #endif
 
   __kmpc_data_sharing_slot *&SlotP = DataSharingState.SlotPtr[WID];
@@ -315,7 +313,7 @@ EXTERN void __kmpc_data_sharing_environment_end(
 #ifdef __AMDGCN__
   int64_t CurActive = __ballot64(true);
 #else
-  int32_t CurActive = __ballot(true);
+  int32_t CurActive = __BALLOT_SYNC(0xFFFFFFFF, true);
 #endif
 
   // Only the warp master can restore the stack and frame information, and only if there are no other threads left behind in this environment (i.e. the warp diverged and returns in different places). This only works if we assume that threads will converge right after the call site that started the environment.
@@ -375,7 +373,10 @@ EXTERN void* __kmpc_get_data_sharing_environment_frame(int32_t SourceThreadID,
   // If the runtime has been elided, use __shared__ memory for master-worker
   // data sharing.  We're reusing the statically allocated data structure
   // that is used for standard data sharing.
-  if (!IsOMPRuntimeInitialized) return (void *) &DataSharingState;
+  if (!IsOMPRuntimeInitialized) {
+    PRINT0(LD_IO | LD_PAR, "return as runtime not initialized\n");
+    return (void *) &DataSharingState;
+  }
 
   // Get the frame used by the requested thread.
 
