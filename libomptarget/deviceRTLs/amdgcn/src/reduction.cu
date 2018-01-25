@@ -49,7 +49,7 @@ int32_t __gpu_block_reduce() {
   unsigned long long tnum = __ballot64(1);
   if (tnum != 0xffffffffffffffff) {
 #else
-  unsigned tnum = __ballot(1);
+  unsigned tnum = __ACTIVEMASK();
   if (tnum != (~0x0)) { // assume swapSize is 32
 #endif
     return 0;
@@ -102,6 +102,8 @@ int32_t __kmpc_reduce_simd(kmp_Indent *loc) {
   }
 }
 
+/**
+to be removed
 EXTERN
 int32_t __kmpc_reduce41(kmp_Indent *loc, int32_t global_tid, int32_t num_vars,
                         size_t reduce_size, void *reduce_data,
@@ -110,6 +112,7 @@ int32_t __kmpc_reduce41(kmp_Indent *loc, int32_t global_tid, int32_t num_vars,
   return __kmpc_reduce_gpu(loc, global_tid, num_vars, reduce_size, reduce_data,
                            reduce_array_size, reductFct, lck);
 }
+*/
 
 EXTERN
 void __kmpc_nvptx_end_reduce(int32_t global_tid) {}
@@ -297,12 +300,23 @@ INLINE __device__ void dc_div(double complex *lhs, double complex rhs) {
   ptrl[1] = (i1 * r2 - r1 * i2) / (r2 * r2 + i2 * i2);
 }
 
+#ifdef __AMDGCN__
 #define ATOMIC_GENOP_DC(_op)                                                   \
   EXTERN void __kmpc_atomic_cmplx8_##_op(kmp_Indent *id_ref, int32_t gtid,     \
                                          double _Complex *lhs,                 \
                                          double _Complex rhs) {                \
     PRINT0(LD_SYNC,"Double complex atomic operation not supported\n");         \
+    __device_trap();                                                           \
     return;                                                                    \
+  }                                                                            \
+  EXTERN double _Complex  __kmpc_atomic_cmplx8_##_op##_cpt(kmp_Indent *id_ref, \
+					 int32_t gtid, 	                       \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs,                  \
+					 int flag) {                           \
+    PRINT0(LD_SYNC,"Double complex atomic operation not supported\n");         \
+    __device_trap();                                                           \
+    return rhs;                                                                \
   }                                                                            \
   EXTERN double _Complex __gpu_warpBlockRedu_cmplx8_##_op(                     \
       double _Complex rhs) {                                                   \
@@ -318,41 +332,87 @@ INLINE __device__ void dc_div(double complex *lhs, double complex rhs) {
     }                                                                          \
     return lhs;                                                                \
   }
-
-#ifdef __AMDGCN__
-#define TNUM unsigned long long tnum = __ballot64(1);
-#define FULL_WRAP_BITFIELDS 0xffffffffffffffff  // ~0x0ul
 #else
-#define TNUM unsigned tnum = __ballot(1);
-#define FULL_WRAP_BITFIELDS 0xffffffff
-#endif
-
-// implementation with shared
-#define ATOMIC_GENOP_DC_obsolete(_op)                                          \
-  EXTERN void __kmpc_atomic_cmplx16_##_op(kmp_Indent *id_ref, int32_t gtid,    \
-                                          double _Complex *lhs,                \
-                                          double _Complex rhs) {               \
-    __shared__ unsigned int stepinblock;                                       \
-    TNUM                                                                       \
-    if (tnum != FULL_WRAP_BITFIELDS) {                                         \
-      return;                                                                  \
-    }                                                                          \
+#define ATOMIC_GENOP_DC(_op)                                                   \
+  EXTERN void __kmpc_atomic_cmplx8_##_op(kmp_Indent *id_ref, int32_t gtid,     \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs) {                \
+    printf("Double complex atomic operation not supported\n");                 \
+    asm("trap;");                                                              \
+    return;                                                                    \
+  }                                                                            \
+  EXTERN double _Complex  __kmpc_atomic_cmplx8_##_op##_cpt(kmp_Indent *id_ref, \
+					 int32_t gtid, 	                       \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs,                  \
+					 int flag) {                           \
+    printf("Double complex atomic operation not supported\n");                 \
+    asm("trap;");                                                              \
+    return rhs;                                                                \
+  }                                                                            \
+  EXTERN double _Complex __gpu_warpBlockRedu_cmplx8_##_op(                     \
+      double _Complex rhs) {                                                   \
+    __shared__ double _Complex lhs;                                            \
     if (threadIdx.x == 0)                                                      \
-      stepinblock = 0;                                                         \
+      lhs = rhs;                                                               \
     __syncthreads();                                                           \
-    while (stepinblock < blockDim.x) {                                         \
-      if (threadIdx.x == stepinblock) {                                        \
-        dc_##_op(lhs, rhs);                                                    \
-        stepinblock++;                                                         \
+    for (int i = 1; i < blockDim.x; i++) {                                     \
+      if (threadIdx.x == i) {                                                  \
+        dc_##_op(&lhs, rhs);                                                   \
       }                                                                        \
       __syncthreads();                                                         \
     }                                                                          \
+    return lhs;                                                                \
   }
+#endif
+
+#ifdef __AMDGCN__
+#define ATOMIC_GENOP_DC_REV(_op)                                               \
+  EXTERN void __kmpc_atomic_cmplx8_##_op##_rev(kmp_Indent *id_ref, int32_t gtid, \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs) {                \
+    PRINT0(LD_SYNC,"Double complex atomic operation not supported\n");         \
+    __device_trap();                                                           \
+    return;                                                                    \
+  }                                                                            \
+  EXTERN double _Complex  __kmpc_atomic_cmplx8_##_op##_cpt_rev(                \
+					 kmp_Indent *id_ref, 		       \
+					 int32_t gtid, 	                       \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs,                  \
+					 int flag) {                           \
+    PRINT0(LD_SYNC,"Double complex atomic operation not supported\n");         \
+    __device_trap();                                                           \
+    return rhs;                                                                \
+  }                                                                            
+#else
+#define ATOMIC_GENOP_DC_REV(_op)                                               \
+  EXTERN void __kmpc_atomic_cmplx8_##_op##_rev(kmp_Indent *id_ref, int32_t gtid, \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs) {                \
+    PRINT0(LD_SYNC, "Double complex atomic operation not supported\n");                 \
+    __device_trap();                                                           \
+    return;                                                                    \
+  }                                                                            \
+  EXTERN double _Complex  __kmpc_atomic_cmplx8_##_op##_cpt_rev(                \
+					 kmp_Indent *id_ref, 		       \
+					 int32_t gtid, 	                       \
+                                         double _Complex *lhs,                 \
+                                         double _Complex rhs,                  \
+					 int flag) {                           \
+    printf("Double complex atomic operation not supported\n");                 \
+    asm("trap;");                                                              \
+    return rhs;                                                                \
+  }                                                                            
+#
+#endif
 
 ATOMIC_GENOP_DC(add);
 ATOMIC_GENOP_DC(sub);
 ATOMIC_GENOP_DC(mul);
 ATOMIC_GENOP_DC(div);
+ATOMIC_GENOP_DC_REV(sub)
+ATOMIC_GENOP_DC_REV(div)
 
 INLINE __device__ uint64_t fc_add(float r1, float i1, float r2, float i2) {
   uint64_t result;
@@ -641,6 +701,8 @@ INLINE __device__ OpType Compute(OpType a,
   return res;
 }
 
+
+/* specialize the template to avoid the switch at runtime */
 template <>
 INLINE __device__ float Compute<float, omptarget_nvptx_add>(float a, float b) {
   return a + b;
@@ -887,7 +949,7 @@ ATOMIC_GENOP_ALL4(ATOMIC_GENOP_PARTIAL, fixed2u, uint16_t, int32_t);
 ATOMIC_GENOP_ALL4(ATOMIC_GENOP_PARTIAL, fixed2, int16_t, int32_t);
 
 EXTERN int32_t __kmpc_shuffle_int32(int32_t val, int16_t delta, int16_t size) {
-  return __shfl_down(val, delta, size);
+  return __SHFL_DOWN_SYNC(0xFFFFFFFF, val, delta, size);
 }
 
 #ifdef __AMDGCN__
@@ -906,8 +968,8 @@ EXTERN int64_t __kmpc_shuffle_int64(int64_t val, int16_t delta, int16_t size) {
 EXTERN int64_t __kmpc_shuffle_int64(int64_t val, int16_t delta, int16_t size) {
   int lo, hi;
   asm volatile("mov.b64 {%0,%1}, %2;" : "=r"(lo), "=r"(hi) : "l"(val));
-  hi = __shfl_down(hi, delta, size);
-  lo = __shfl_down(lo, delta, size);
+  hi = __SHFL_DOWN_SYNC(0xFFFFFFFF, hi, delta, size);
+  lo = __SHFL_DOWN_SYNC(0xFFFFFFFF, lo, delta, size);
   asm volatile("mov.b64 %0, {%1,%2};" : "=l"(val) : "r"(lo), "r"(hi));
   return val;
 }
@@ -916,14 +978,11 @@ EXTERN int64_t __kmpc_shuffle_int64(int64_t val, int16_t delta, int16_t size) {
 template <typename T, omptarget_nvptx_BINOP_t binop>
 __inline__ __device__ T reduInitVal() {
   switch (binop) {
-  case omptarget_nvptx_inc:
-  case omptarget_nvptx_dec:
-  case omptarget_nvptx_add:
-  case omptarget_nvptx_sub:
-  case omptarget_nvptx_sub_rev:
-    return (T)0;
   case omptarget_nvptx_mul:
   case omptarget_nvptx_div:
+  case omptarget_nvptx_div_rev:
+  case omptarget_nvptx_andl:
+  case omptarget_nvptx_andb:
     return (T)1;
   default:
     return (T)0;
@@ -971,7 +1030,7 @@ static INLINE uint32_t gpu_irregular_simd_reduce(void *reduce_data, kmp_ShuffleR
   uint64_t Liveness = __ballot64(true);
   uint32_t logical_lane_id = __popcll(Liveness & lanemask_lt) * 2;
 #else
-  uint32_t Liveness = __ballot(true);
+  uint32_t Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
   uint32_t logical_lane_id = __popc(Liveness & lanemask_lt) * 2;
 #endif
 #ifdef __AMDGCN__
@@ -985,7 +1044,7 @@ static INLINE uint32_t gpu_irregular_simd_reduce(void *reduce_data, kmp_ShuffleR
     remote_id = __ffsll(Liveness & lanemask_gt);
     size = __popcll(Liveness);
 #else
-    Liveness = __ballot(true);
+    Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
     remote_id = __ffs(Liveness & lanemask_gt);
     size = __popc(Liveness);
 #endif
@@ -1050,7 +1109,7 @@ int32_t __kmpc_nvptx_simd_reduce_nowait(int32_t global_tid,
   uint64_t Liveness = __ballot64(true);
   if (Liveness == 0xffffffffffffffff) {
 #else
-  uint32_t Liveness = __ballot(true);
+  uint32_t Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
   if (Liveness == 0xffffffff) {
 #endif
     gpu_regular_warp_reduce(reduce_data, shflFct);
@@ -1060,6 +1119,64 @@ int32_t __kmpc_nvptx_simd_reduce_nowait(int32_t global_tid,
   }
 }
 
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+INLINE
+int32_t nvptx_parallel_reduce_nowait(int32_t global_tid, int32_t num_vars,
+                                     size_t reduce_size, void *reduce_data,
+                                     kmp_ShuffleReductFctPtr shflFct,
+                                     kmp_InterWarpCopyFctPtr cpyFct,
+                                     bool isSPMDExecutionMode,
+                                     bool isRuntimeUninitialized = false) {
+  /*
+   * This reduce function handles reduction within a team. It handles
+   * parallel regions in both L1 and L2 parallelism levels. It also
+   * supports Generic, SPMD, and NoOMP modes.
+   *
+   * 1. Reduce within a warp.
+   * 2. Warp master copies value to warp 0 via shared memory.
+   * 3. Warp 0 reduces to a single value.
+   * 4. The reduced value is available in the thread that returns 1.
+   */
+  uint32_t BlockThreadId = GetLogicalThreadIdInBlock();
+  uint32_t NumThreads = GetNumberOfOmpThreads(BlockThreadId, isSPMDExecutionMode, isRuntimeUninitialized);
+  uint32_t WarpsNeeded = (NumThreads+WARPSIZE-1)/WARPSIZE;
+  uint32_t WarpId = BlockThreadId/WARPSIZE;
+
+  // Volta execution model:
+  // For the Generic execution mode a parallel region either has 1 thread and beyond that,
+  // always a multiple of 32.
+  // For the SPMD execution mode we may have any number of threads.
+  if ((NumThreads % WARPSIZE == 0) || (WarpId < WarpsNeeded - 1))
+    gpu_regular_warp_reduce(reduce_data, shflFct);
+  else if (NumThreads > 1) // Only SPMD execution mode comes thru this case.
+    gpu_irregular_warp_reduce(reduce_data, shflFct,
+        /*LaneCount=*/NumThreads % WARPSIZE, /*LaneId=*/GetThreadIdInBlock() % WARPSIZE);
+//  else if (!isRuntimeUninitialized) // Dispersed lanes. Only threads in L2 parallel region may enter here; return early.
+//    return gpu_irregular_simd_reduce(reduce_data, shflFct);
+
+  // When we have more than [warpsize] number of threads
+  // a block reduction is performed here.
+  //
+  // Only L1 parallel region can enter this if condition.
+  if (NumThreads > WARPSIZE) {
+    // Gather all the reduced values from each warp
+    // to the first warp.
+    cpyFct(reduce_data, WarpsNeeded);
+
+    if (WarpId == 0)
+      gpu_irregular_warp_reduce(reduce_data, shflFct, WarpsNeeded, BlockThreadId);
+
+    return BlockThreadId == 0;
+//  } else if (isRuntimeUninitialized /* Never an L2 parallel region without the OMP runtime */) {
+//    return BlockThreadId == 0;
+  }
+  return BlockThreadId == 0;
+
+  // Get the OMP thread Id. This is different from BlockThreadId in the case of
+  // an L2 parallel region.
+//  return GetOmpThreadId(BlockThreadId, isSPMDExecutionMode, isRuntimeUninitialized) == 0;
+}
+#else
 INLINE
 int32_t nvptx_parallel_reduce_nowait(int32_t global_tid, int32_t num_vars,
                                      size_t reduce_size, void *reduce_data,
@@ -1087,7 +1204,7 @@ int32_t nvptx_parallel_reduce_nowait(int32_t global_tid, int32_t num_vars,
   else if (!isRuntimeUninitialized) // Dispersed lanes. Only threads in L2 parallel region may enter here; return early.
     return gpu_irregular_simd_reduce(reduce_data, shflFct);
 #else
-  uint32_t Liveness = __ballot(true);
+  uint32_t Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
   if (Liveness == 0xffffffff) // Full warp
     gpu_regular_warp_reduce(reduce_data, shflFct);
   else if (!(Liveness & (Liveness + 1))) // Partial warp but contiguous lanes
@@ -1123,6 +1240,7 @@ int32_t nvptx_parallel_reduce_nowait(int32_t global_tid, int32_t num_vars,
   // an L2 parallel region.
   return GetOmpThreadId(BlockThreadId, isSPMDExecutionMode, isRuntimeUninitialized) == 0;
 }
+#endif // __CUDA_ARCH__ >= 700
 
 EXTERN
 int32_t __kmpc_nvptx_parallel_reduce_nowait(
@@ -1153,10 +1271,95 @@ int32_t __kmpc_nvptx_parallel_reduce_nowait_simple_generic(
                                       /*isRuntimeUninitialized=*/true);
 }
 
-// FIXME
-__device__ int scratchpad[65536];
-__device__ static unsigned timestamp = 0;
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+INLINE
+int32_t nvptx_teams_reduce_nowait(
+    int32_t global_tid, int32_t num_vars, size_t reduce_size, void *reduce_data,
+    kmp_ShuffleReductFctPtr shflFct, kmp_InterWarpCopyFctPtr cpyFct,
+    kmp_CopyToScratchpadFctPtr scratchFct, kmp_LoadReduceFctPtr ldFct,
+    bool isSPMDExecutionMode, bool isRuntimeUninitialized = false) {
+  uint32_t ThreadId = GetLogicalThreadIdInBlock();
+  // In non-generic mode all workers participate in the teams reduction.
+  // In generic mode only the team master participates in the teams
+  // reduction because the workers are waiting for parallel work.
+  uint32_t NumThreads = isSPMDExecutionMode
+    ? GetNumberOfOmpThreads(ThreadId, /*isSPMDExecutionMode=*/true, isRuntimeUninitialized)
+    : /*Master thread only*/ 1;
+  uint32_t TeamId = GetBlockIdInKernel();
+  uint32_t NumTeams = GetNumberOfBlocksInKernel();
+  __shared__ volatile bool IsLastTeam;
 
+  // Team masters of all teams write to the scratchpad.
+  if (ThreadId == 0) {
+    unsigned int *timestamp = GetTeamsReductionTimestamp();
+    char *scratchpad = GetTeamsReductionScratchpad();
+
+    scratchFct(reduce_data, scratchpad, TeamId, NumTeams);
+    __threadfence();
+
+    // atomicInc increments 'timestamp' and has a range [0, NumTeams-1].
+    // It resets 'timestamp' back to 0 once the last team increments
+    // this counter.
+    unsigned val = atomicInc(timestamp, NumTeams-1);
+    IsLastTeam = val == NumTeams - 1;
+  }
+
+  // We have to wait on L1 barrier because in GENERIC mode the workers
+  // are waiting on barrier 0 for work.
+  //
+  // If we guard this barrier as follows it leads to deadlock, probably
+  // because of a compiler bug: if (!IsGenericMode()) __syncthreads();
+  uint16_t SyncWarps = (NumThreads+WARPSIZE-1)/WARPSIZE;
+  named_sync(L1_BARRIER, SyncWarps*WARPSIZE);
+
+  // If this team is not the last, quit.
+  if (/* Volatile read by all threads */ !IsLastTeam)
+    return 0;
+
+  //
+  // Last team processing.
+  //
+
+  // Threads in excess of #teams do not participate in reduction of the
+  // scratchpad values.
+  uint32_t ActiveThreads = NumThreads;
+  if (NumTeams < NumThreads) {
+    ActiveThreads = (NumTeams < WARPSIZE) ? 1 : NumTeams & ~((uint16_t)WARPSIZE - 1);
+  }
+  if (ThreadId >= ActiveThreads)
+    return 0;
+
+  // Load from scratchpad and reduce.
+  char *scratchpad = GetTeamsReductionScratchpad();
+  ldFct(reduce_data, scratchpad, ThreadId, NumTeams, /*Load only*/0);
+  for (uint32_t i = ActiveThreads + ThreadId; i < NumTeams; i += ActiveThreads)
+    ldFct(reduce_data, scratchpad, i, NumTeams, /*Load and reduce*/1);
+
+  uint32_t WarpsNeeded = (ActiveThreads+WARPSIZE-1)/WARPSIZE;
+  uint32_t WarpId = ThreadId/WARPSIZE;
+
+  // Reduce across warps to the warp master.
+  if ((ActiveThreads % WARPSIZE == 0) || (WarpId < WarpsNeeded - 1)) // Full warp
+    gpu_regular_warp_reduce(reduce_data, shflFct);
+  else if (ActiveThreads > 1) // Partial warp but contiguous lanes
+    // Only SPMD execution mode comes thru this case.
+    gpu_irregular_warp_reduce(reduce_data, shflFct,
+        /*LaneCount=*/ActiveThreads % WARPSIZE, /*LaneId=*/ThreadId % WARPSIZE);
+
+  // When we have more than [warpsize] number of threads
+  // a block reduction is performed here.
+  if (ActiveThreads > WARPSIZE) {
+    // Gather all the reduced values from each warp
+    // to the first warp.
+    cpyFct(reduce_data, WarpsNeeded);
+
+    if (WarpId == 0)
+      gpu_irregular_warp_reduce(reduce_data, shflFct, WarpsNeeded, ThreadId);
+  }
+
+  return ThreadId == 0;
+}
+#else
 INLINE
 int32_t nvptx_teams_reduce_nowait(
     int32_t global_tid, int32_t num_vars, size_t reduce_size, void *reduce_data,
@@ -1225,7 +1428,7 @@ int32_t nvptx_teams_reduce_nowait(
     gpu_irregular_warp_reduce(reduce_data, shflFct,
         /*LaneCount=*/__popcll(Liveness), /*LaneId=*/ThreadId % WARPSIZE);
 #else
-  uint32_t Liveness = __ballot(true);
+  uint32_t Liveness = __BALLOT_SYNC(0xFFFFFFFF, true);
   if (Liveness == 0xffffffff) // Full warp
     gpu_regular_warp_reduce(reduce_data, shflFct);
   else // Partial warp but contiguous lanes
@@ -1248,6 +1451,7 @@ int32_t nvptx_teams_reduce_nowait(
 
   return ThreadId == 0;
 }
+#endif // __CUDA_ARCH__ >= 700
 
 EXTERN
 int32_t __kmpc_nvptx_teams_reduce_nowait(int32_t global_tid, int32_t num_vars,
