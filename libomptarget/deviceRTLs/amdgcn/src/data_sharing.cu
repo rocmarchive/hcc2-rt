@@ -42,15 +42,8 @@ __device__ static unsigned getMasterThreadId() {
 }
 // The lowest ID among the active threads in the warp.
 __device__ static unsigned getWarpMasterActiveThreadId() {
-  unsigned long long Mask = __BALLOT_SYNC(0xFFFFFFFF, true);
-  unsigned long long ShNum = 32 - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
-  unsigned long long Sh = Mask << ShNum;
-  return __popc(Sh);
-}
-// The lowest ID among the active threads in the warp.
-EXTERN int32_t __kmpc_warp_master_active_thread_id() {
 #ifdef __AMDGCN__
-  int64_t Mask = __kmpc_warp_active_thread_mask64();
+  int64_t Mask = __ballot64(true);
   unsigned tid  = threadIdx.x;
   unsigned laneid = (tid & 0X3F);
   int64_t Sh;
@@ -63,11 +56,18 @@ EXTERN int32_t __kmpc_warp_master_active_thread_id() {
   }
   Sh = Mask << Shnum;
   unsigned popret = __popcll(Sh);
-  //PRINT(LD_IO,"__kmpc_warp_master_active_thread_id: tid=%d laneid=%d Shnum=%d RETURN VAL=%d\n", tid, laneid, Shnum, popret);
+  //PRINT(LD_IO,"getWarpMasterActiveThreadId: tid=%d laneid=%d Shnum=%d RETURN VAL=%d\n", tid, laneid, Shnum, popret);
   return popret;
 #else
-  return getWarpMasterActiveThreadId();
+  unsigned long long Mask = __BALLOT_SYNC(0xFFFFFFFF, true);
+  unsigned long long ShNum = 32 - (getThreadId() & DS_Max_Worker_Warp_Size_Log2_Mask);
+  unsigned long long Sh = Mask << ShNum;
+  return __popc(Sh);
 #endif
+}
+// The lowest ID among the active threads in the warp.
+EXTERN int32_t __kmpc_warp_master_active_thread_id() {
+  return getWarpMasterActiveThreadId();
 }
 // Return true if this is the master thread.
 __device__ static bool IsMasterThread() {
