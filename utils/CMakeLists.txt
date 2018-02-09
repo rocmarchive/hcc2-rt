@@ -11,7 +11,7 @@
 #
 ##===----------------------------------------------------------------------===##
 
-find_package(LLVM 6.0.0 QUIET CONFIG
+find_package(LLVM QUIET CONFIG
   PATHS
   $ENV{HCC2}
   /opt/rocm/hcc2
