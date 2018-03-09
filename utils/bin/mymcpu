@@ -236,7 +236,11 @@ if [ "$thisname" == "" ] ; then
       #kfdid=`cat /sys/devices/virtual/kfd/kfd/topology/nodes/*/properties | grep device_id | sort -u | cut -d" " -f2 | grep -v "^0" | sort -u |  xargs printf "%x\n"`
       if [ "$kfdid" != "" ] ; then
         thisname=$(kfdid2code $kfdid)
+      else
+        thisname="unknown"
       fi
+   else
+     thisname="unknown"
    fi
 
 #  kfd may not be working so check lspci for ATI
