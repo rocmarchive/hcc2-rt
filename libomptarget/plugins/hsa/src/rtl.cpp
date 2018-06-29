@@ -33,6 +33,7 @@
 // Header from ATMI interface
 #include "atmi_runtime.h"
 #include "atmi_interop_hsa.h"
+#include "atmi_kl.h"
 
 #include "omptargetplugin.h"
 
@@ -120,7 +121,7 @@ struct TargetKernelCompProperties {
           ReductionVarsSize(_ReductionVarsSize) {}
 };
 
-typedef void * ATMIfunction;
+typedef atmi_kernel_t ATMIfunction;
 /// Use a single entity to encode a kernel and a set of flags
 struct KernelTy {
   ATMIfunction Func;
@@ -227,6 +228,12 @@ public:
   void clearOffloadEntriesTable(int device_id){
     assert( device_id < (int)FuncGblEntries.size() && "Unexpected device id!");
     FuncOrGblEntryTy &E = FuncGblEntries[device_id];
+    for(std::vector<__tgt_offload_entry>::iterator it = E.Entries.begin();
+        it != E.Entries.end(); it++) {
+        KernelTy *kernel_info = (KernelTy *)it->addr;
+        if (kernel_info->Func.handle != 0ull)
+            atmi_kernel_release(kernel_info->Func);
+    }
     E.Entries.clear();
     E.Table.EntriesBegin = E.Table.EntriesEnd = 0;
   }
@@ -251,9 +258,9 @@ public:
       return;
     }
     atmi_machine_t *machine = atmi_machine_get_info();
-    NumberOfiGPUs = machine->device_count_by_type[ATMI_DEVTYPE_iGPU]; 
-    NumberOfdGPUs = machine->device_count_by_type[ATMI_DEVTYPE_dGPU]; 
-    NumberOfDevices = machine->device_count_by_type[ATMI_DEVTYPE_GPU]; 
+    NumberOfiGPUs = machine->device_count_by_type[ATMI_DEVTYPE_iGPU];
+    NumberOfdGPUs = machine->device_count_by_type[ATMI_DEVTYPE_dGPU];
+    NumberOfDevices = machine->device_count_by_type[ATMI_DEVTYPE_GPU];
 
     if (NumberOfDevices == 0) {
       DP("There are no devices supporting HSA.\n");
@@ -600,7 +607,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
 
    DP("ATMI module successfully loaded!\n");
 
-  // TODO: Check with Guansong to understand the below comment more thoroughly. 
+  // TODO: Check with Guansong to understand the below comment more thoroughly.
   // Here, we take advantage of the data that is appended after img_end to get
   // the symbols' name we need to load. This data consist of the host entries
   // begin and end as well as the target name (see the offloading linker script
@@ -654,14 +661,28 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
        continue;
      }
 
-     // TODO: we malloc, need free
-     char *name_buffer = (char *)malloc(strlen(e->name) + 1);
-     DP("Malloc address %016llx.\n",(long long unsigned)(Elf64_Addr)name_buffer);
+     DP("to find the kernel name: %s size: %lu\n", e->name, strlen(e->name));
 
-     memcpy(name_buffer, e->name, strlen(e->name));
-     name_buffer[strlen(e->name)] = 0;
-     sprintf(name_buffer, "%s", e->name);
-     DP("to find the kernel name: %s size: %lu\n", name_buffer, strlen(e->name));
+     atmi_mem_place_t place = DeviceInfo.GPUMEMPlaces[device_id];
+     atmi_kernel_t kernel;
+     uint32_t kernel_segment_size;
+     err = atmi_interop_hsa_get_kernel_info(place, e->name,
+                HSA_EXECUTABLE_SYMBOL_INFO_KERNEL_KERNARG_SEGMENT_SIZE,
+                &kernel_segment_size);
+     // just use the non-hidden args
+     kernel_segment_size -= sizeof(atmi_implicit_args_t);
+
+     // each arg is a void * in this openmp implementation
+     uint32_t arg_num = kernel_segment_size / sizeof(void *);
+     std::vector<size_t> arg_sizes(arg_num);
+     for(std::vector<size_t>::iterator it = arg_sizes.begin();
+                        it != arg_sizes.end(); it++) {
+        *it = sizeof(void *);
+     }
+
+     atmi_kernel_create(&kernel, arg_num, &arg_sizes[0],
+                        1,
+                        ATMI_DEVTYPE_GPU, e->name);
 
      // Load the kernel's computation properties
      // Default values (in case symbol is missing from cubin file):
@@ -675,7 +696,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
 
      void *CPPtr;
      uint32_t varsize;
-     atmi_mem_place_t place = DeviceInfo.GPUMEMPlaces[device_id];
      err = atmi_interop_hsa_get_symbol_info(place, CPName,
                                                         &CPPtr, &varsize);
      if (err == ATMI_STATUS_SUCCESS) {
@@ -707,7 +727,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id, __tgt_device_image 
 
      check("Loading computation property", err);
 
-     KernelsList.push_back(KernelTy((void *)name_buffer, CP));
+     KernelsList.push_back(KernelTy(kernel, CP));
 
      __tgt_offload_entry entry = *e;
      entry.addr = (void *)&KernelsList.back();
@@ -775,7 +795,7 @@ void *__tgt_rtl_data_alloc(int device_id, int64_t size, void *){
 }
 
 int32_t __tgt_rtl_data_submit(int device_id, void *tgt_ptr, void *hst_ptr, int64_t size){
-    atmi_status_t err; 
+    atmi_status_t err;
     assert(device_id < (int)DeviceInfo.Machine->device_count_by_type[ATMI_DEVTYPE_GPU] && "Device ID too large");
     DP("Submit data %ld bytes, (hst:%016llx) -> (tgt:%016llx).\n", size, (long long unsigned)(Elf64_Addr)hst_ptr, (long long unsigned)(Elf64_Addr)tgt_ptr);
     err = atmi_memcpy(tgt_ptr, hst_ptr, (size_t) size);
@@ -831,18 +851,13 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   // Allocate one more pointer for the reduction scratchpad.
   std::vector<void *> args(arg_num + 1);
   std::vector<void *> ptrs(arg_num + 1);
-  std::vector<size_t> arg_sizes(arg_num + 1);
 
   DP("Arg_num: %d\n", arg_num);
   for (int32_t i = 0; i < arg_num; ++i) {
     ptrs[i] = (void *)((intptr_t)tgt_args[i] + tgt_offsets[i]);
     args[i] = &ptrs[i];
-    arg_sizes[i] = sizeof(void *);
     DP("Offseted base: arg[%d]:" DPxMOD "\n", i, DPxPTR(ptrs[i]));
   }
-
-  // ??? this line is added in commit 56d2dd45
-  // arg_sizes[arg_num- 1] = sizeof(int);
 
   KernelTy *KernelInfo = (KernelTy *)tgt_entry_ptr;
 
@@ -935,31 +950,21 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     __tgt_rtl_data_submit(device_id, Scratchpad, &timestamp, sizeof(unsigned));
   }
   args[arg_num] = &Scratchpad;
-  arg_sizes[arg_num] = sizeof(void *);
 
   // Run on the device.
-  char *kernel_name = (char *)KernelInfo->Func;
-  DP("Launch kernel %s with %d blocks and %d threads\n", kernel_name, num_groups,
+  atmi_kernel_t kernel = KernelInfo->Func;
+  DP("Launch kernel with %d blocks and %d threads\n", num_groups,
      threadsPerGroup);
-
-  atmi_kernel_t kernel;
-  const int GPU_IMPL = 42;
-  atmi_kernel_create_empty(&kernel, arg_num + 1, &arg_sizes[0]);
-  atmi_kernel_add_gpu_impl(kernel, kernel_name, GPU_IMPL);
 
   ATMI_LPARM_1D(lparm, num_groups*threadsPerGroup);
   lparm->groupDim[0] = threadsPerGroup;
   lparm->synchronous = ATMI_TRUE;
   lparm->groupable = ATMI_FALSE;
   // TODO: CUDA does not look like being synchronous.
-  lparm->kernel_id = GPU_IMPL;
   lparm->place = DeviceInfo.GPUPlaces[device_id];
   atmi_task_launch(lparm, kernel, &args[0]);
 
-  DP("Kernel %s completed\n", kernel_name);
-  // FIXME: if kernel launch is asynchronous, then kernel should be added to a
-  // vector in deviceinfo and released in the destructor
-  atmi_kernel_release(kernel);
+  DP("Kernel completed\n");
 
   if (Scratchpad)
     __tgt_rtl_data_delete(device_id, Scratchpad);
