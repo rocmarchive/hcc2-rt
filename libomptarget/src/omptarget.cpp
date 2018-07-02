@@ -112,6 +112,7 @@ struct ShadowPtrValTy {
   void *TgtPtrVal;
 };
 typedef std::map<void *, ShadowPtrValTy> ShadowPtrListTy;
+typedef std::map<void *, uint64_t> DataTaskMapTy;
 
 ///
 struct PendingCtorDtorListsTy {
@@ -135,7 +136,9 @@ struct DeviceTy {
 
   ShadowPtrListTy ShadowPtrMap;
 
-  std::mutex DataMapMtx, PendingGlobalsMtx, ShadowMtx;
+  DataTaskMapTy DataTaskMap;
+
+  std::mutex DataMapMtx, PendingGlobalsMtx, ShadowMtx, DataTaskMapMtx;
 
   uint64_t loopTripCnt;
 
@@ -143,6 +146,8 @@ struct DeviceTy {
       : DeviceID(-1), RTL(RTL), RTLDeviceID(-1), IsInit(false), InitFlag(),
         HasPendingGlobals(false), HostDataToTargetMap(),
         PendingCtorsDtors(), ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(),
+        DataTaskMapMtx(),
+        DataTaskMap(),
         ShadowMtx(), loopTripCnt(0) {}
 
   // The existence of mutexes makes DeviceTy non-copyable. We need to
@@ -153,6 +158,8 @@ struct DeviceTy {
         HostDataToTargetMap(d.HostDataToTargetMap),
         PendingCtorsDtors(d.PendingCtorsDtors), ShadowPtrMap(d.ShadowPtrMap),
         DataMapMtx(), PendingGlobalsMtx(),
+        DataTaskMapMtx(),
+        DataTaskMap(),
         ShadowMtx(), loopTripCnt(d.loopTripCnt) {}
 
   DeviceTy& operator=(const DeviceTy &d) {
@@ -164,6 +171,7 @@ struct DeviceTy {
     HostDataToTargetMap = d.HostDataToTargetMap;
     PendingCtorsDtors = d.PendingCtorsDtors;
     ShadowPtrMap = d.ShadowPtrMap;
+    DataTaskMap = d.DataTaskMap;
     loopTripCnt = d.loopTripCnt;
 
     return *this;
@@ -171,6 +179,7 @@ struct DeviceTy {
 
   long getMapEntryRefCnt(void *HstPtrBegin);
   LookupResult lookupMapping(void *HstPtrBegin, int64_t Size);
+  uint64_t lookupDependInfo(void *HstPtrBegin, int64_t Size);
   void *getOrAllocTgtPtr(void *HstPtrBegin, void *HstPtrBase, int64_t Size,
       bool &IsNew, bool IsImplicit, bool UpdateRefCount = true);
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size);
@@ -308,7 +317,7 @@ public:
 void RTLsTy::LoadRTLs() {
 #ifdef OMPTARGET_DEBUG
   if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
-    DebugLevel = std::stoi(envStr); 
+    DebugLevel = std::stoi(envStr);
   }
   if (!DebugLevel) {
     if (char *envStr = getenv("OFFLOAD_DEBUG")) {
@@ -331,7 +340,7 @@ void RTLsTy::LoadRTLs() {
   // Attempt to open all the plugins and, if they exist, check if the interface
   // is correct and if they are supporting any devices.
   for (auto *Name : RTLNames) {
- 
+
     const char *QuickCheckName = RTLQuickCheckFiles[listptr++];
     if(strcmp(QuickCheckName,"") && (stat(QuickCheckName,&stat_buffer) != 0 )) {
       DP("Unable to find file '%s', skipping dlopen for '%s' \n", QuickCheckName,Name);
@@ -2204,10 +2213,34 @@ EXTERN int __tgt_target_teams_nowait(int64_t device_id, void *host_ptr,
     int32_t arg_num, void **args_base, void **args, int64_t *arg_sizes,
     int64_t *arg_types, int32_t team_num, int32_t thread_limit) {
 
+  DP("Entering target region nowait with entry point " DPxMOD " and device Id %" PRId64
+      " with %d mappings\n", DPxPTR(host_ptr), device_id, arg_num);
+
   return __tgt_target_teams(device_id, host_ptr, arg_num, args_base, args,
                             arg_sizes, arg_types, team_num, thread_limit);
 }
 
+EXTERN int __tgt_target_teams_nowait_depend(int64_t device_id, void *host_ptr,
+    int32_t arg_num, void **args_base, void **args, int64_t *arg_sizes,
+    int64_t *arg_types, int32_t team_num, int32_t thread_limit,
+    int32_t depNum, void *depList, int32_t noAliasDepNum,
+    void *noAliasDepList) {
+  int rc = OFFLOAD_SUCCESS;
+
+  DeviceTy &Device = Devices[device_id];
+  DP("Entering target region nowait depend with entry point " DPxMOD " and device Id %" PRId64
+      " with %d mappings and %d dependencies\n", DPxPTR(host_ptr), device_id, arg_num, depNum);
+
+  // List all dependency info
+  kmp_depend_info_t *deps = (kmp_depend_info_t *)depList;
+  for(int i = 0; i < depNum; i++) {
+    DP("Dep[%d] = %p: %lu (%x)\n", i, (void *)deps[i].base_addr, deps[i].len,
+                                  (deps[i].flags.out << 1) | deps[i].flags.in);
+  }
+
+  return __tgt_target_teams(device_id, host_ptr, arg_num, args_base, args,
+                            arg_sizes, arg_types, team_num, thread_limit);
+}
 
 // The trip count mechanism will be revised - this scheme is not thread-safe.
 EXTERN void __kmpc_push_target_tripcount(int64_t device_id,

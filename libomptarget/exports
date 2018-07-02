@@ -12,6 +12,7 @@ VERS1.0 {
     __tgt_target_data_update_nowait;
     __tgt_target_nowait;
     __tgt_target_teams_nowait;
+    __tgt_target_teams_nowait_depend;
     __tgt_target_data_begin_depend;
     __tgt_target_data_end_depend;
     __tgt_target_data_update_depend;
