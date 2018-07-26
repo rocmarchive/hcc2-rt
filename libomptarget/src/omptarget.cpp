@@ -64,7 +64,10 @@ static const char *RTLQuickCheckFiles[] = {
 struct RTLInfoTy;
 static int target(int64_t device_id, void *host_ptr, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
-    int32_t team_num, int32_t thread_limit, int IsTeamConstruct);
+    int32_t team_num, int32_t thread_limit, int IsTeamConstruct,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList,
+    bool nowait=false);
 
 /// All begin addresses must be 8-aligned
 static const int64_t alignment = 8;
@@ -112,7 +115,6 @@ struct ShadowPtrValTy {
   void *TgtPtrVal;
 };
 typedef std::map<void *, ShadowPtrValTy> ShadowPtrListTy;
-typedef std::map<void *, uint64_t> DataTaskMapTy;
 
 ///
 struct PendingCtorDtorListsTy {
@@ -136,9 +138,7 @@ struct DeviceTy {
 
   ShadowPtrListTy ShadowPtrMap;
 
-  DataTaskMapTy DataTaskMap;
-
-  std::mutex DataMapMtx, PendingGlobalsMtx, ShadowMtx, DataTaskMapMtx;
+  std::mutex DataMapMtx, PendingGlobalsMtx, ShadowMtx;
 
   uint64_t loopTripCnt;
 
@@ -146,8 +146,6 @@ struct DeviceTy {
       : DeviceID(-1), RTL(RTL), RTLDeviceID(-1), IsInit(false), InitFlag(),
         HasPendingGlobals(false), HostDataToTargetMap(),
         PendingCtorsDtors(), ShadowPtrMap(), DataMapMtx(), PendingGlobalsMtx(),
-        DataTaskMapMtx(),
-        DataTaskMap(),
         ShadowMtx(), loopTripCnt(0) {}
 
   // The existence of mutexes makes DeviceTy non-copyable. We need to
@@ -158,8 +156,6 @@ struct DeviceTy {
         HostDataToTargetMap(d.HostDataToTargetMap),
         PendingCtorsDtors(d.PendingCtorsDtors), ShadowPtrMap(d.ShadowPtrMap),
         DataMapMtx(), PendingGlobalsMtx(),
-        DataTaskMapMtx(),
-        DataTaskMap(),
         ShadowMtx(), loopTripCnt(d.loopTripCnt) {}
 
   DeviceTy& operator=(const DeviceTy &d) {
@@ -171,7 +167,6 @@ struct DeviceTy {
     HostDataToTargetMap = d.HostDataToTargetMap;
     PendingCtorsDtors = d.PendingCtorsDtors;
     ShadowPtrMap = d.ShadowPtrMap;
-    DataTaskMap = d.DataTaskMap;
     loopTripCnt = d.loopTripCnt;
 
     return *this;
@@ -193,14 +188,20 @@ struct DeviceTy {
   int32_t initOnce();
   __tgt_target_table *load_binary(void *Img);
 
-  int32_t data_submit(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size);
+  int32_t data_submit(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
+    int32_t depNum, void *depList, int32_t noAliasDepNum,
+    void *noAliasDepList);
   int32_t data_retrieve(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size);
 
   int32_t run_region(void *TgtEntryPtr, void **TgtVarsPtr,
-      ptrdiff_t *TgtOffsets, int32_t TgtVarsSize);
+      ptrdiff_t *TgtOffsets, int32_t TgtVarsSize,
+      int32_t depNum, void *depList, int32_t noAliasDepNum,
+      void *noAliasDepList);
   int32_t run_team_region(void *TgtEntryPtr, void **TgtVarsPtr,
       ptrdiff_t *TgtOffsets, int32_t TgtVarsSize, int32_t NumTeams,
-      int32_t ThreadLimit, uint64_t LoopTripCount);
+      int32_t ThreadLimit, uint64_t LoopTripCount,
+      int32_t depNum, void *depList, int32_t noAliasDepNum,
+      void *noAliasDepList);
 
 private:
   // Call to RTL
@@ -217,13 +218,16 @@ struct RTLInfoTy {
   typedef int32_t(init_device_ty)(int32_t);
   typedef __tgt_target_table *(load_binary_ty)(int32_t, void *);
   typedef void *(data_alloc_ty)(int32_t, int64_t, void *);
-  typedef int32_t(data_submit_ty)(int32_t, void *, void *, int64_t);
+  typedef int32_t(data_submit_ty)(int32_t, void *, void *, int64_t,
+                              int32_t, void *, int32_t, void *);
   typedef int32_t(data_retrieve_ty)(int32_t, void *, void *, int64_t);
   typedef int32_t(data_delete_ty)(int32_t, void *);
   typedef int32_t(run_region_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                 int32_t);
+                                 int32_t,
+                                 int32_t, void *, int32_t, void *);
   typedef int32_t(run_team_region_ty)(int32_t, void *, void **, ptrdiff_t *,
-                                      int32_t, int32_t, int32_t, uint64_t);
+                                      int32_t, int32_t, int32_t, uint64_t,
+                                      int32_t, void *, int32_t, void *);
 
   int32_t Idx;                     // RTL index, index is the number of devices
                                    // of other RTLs that were registered before,
@@ -629,7 +633,8 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
   } else if (src_device == omp_get_initial_device()) {
     DP("copy from host to device\n");
     DeviceTy& DstDev = Devices[dst_device];
-    rc = DstDev.data_submit(dstAddr, srcAddr, length);
+    rc = DstDev.data_submit(dstAddr, srcAddr, length,
+                0, NULL, 0, NULL);
   } else if (dst_device == omp_get_initial_device()) {
     DP("copy from device to host\n");
     DeviceTy& SrcDev = Devices[src_device];
@@ -641,7 +646,8 @@ EXTERN int omp_target_memcpy(void *dst, void *src, size_t length,
     DeviceTy& DstDev = Devices[dst_device];
     rc = SrcDev.data_retrieve(buffer, srcAddr, length);
     if (rc == OFFLOAD_SUCCESS)
-      rc = DstDev.data_submit(dstAddr, buffer, length);
+      rc = DstDev.data_submit(dstAddr, buffer, length,
+                0, NULL, 0, NULL);
   }
 
   DP("omp_target_memcpy returns %d\n", rc);
@@ -1046,8 +1052,11 @@ __tgt_target_table *DeviceTy::load_binary(void *Img) {
 
 // Submit data to device.
 int32_t DeviceTy::data_submit(void *TgtPtrBegin, void *HstPtrBegin,
-    int64_t Size) {
-  return RTL->data_submit(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size);
+    int64_t Size,
+    int32_t depNum, void *depList, int32_t noAliasDepNum,
+    void *noAliasDepList) {
+  return RTL->data_submit(RTLDeviceID, TgtPtrBegin, HstPtrBegin, Size,
+    depNum, depList, noAliasDepNum, noAliasDepList);
 }
 
 // Retrieve data from device.
@@ -1058,17 +1067,23 @@ int32_t DeviceTy::data_retrieve(void *HstPtrBegin, void *TgtPtrBegin,
 
 // Run region on device
 int32_t DeviceTy::run_region(void *TgtEntryPtr, void **TgtVarsPtr,
-    ptrdiff_t *TgtOffsets, int32_t TgtVarsSize) {
+    ptrdiff_t *TgtOffsets, int32_t TgtVarsSize,
+    int32_t depNum, void *depList, int32_t noAliasDepNum,
+    void *noAliasDepList) {
   return RTL->run_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-      TgtVarsSize);
+      TgtVarsSize, 
+      depNum, depList, noAliasDepNum, noAliasDepList);
 }
 
 // Run team region on device.
 int32_t DeviceTy::run_team_region(void *TgtEntryPtr, void **TgtVarsPtr,
     ptrdiff_t *TgtOffsets, int32_t TgtVarsSize, int32_t NumTeams,
-    int32_t ThreadLimit, uint64_t LoopTripCount) {
+    int32_t ThreadLimit, uint64_t LoopTripCount,
+    int32_t depNum, void *depList, int32_t noAliasDepNum,
+    void *noAliasDepList) {
   return RTL->run_team_region(RTLDeviceID, TgtEntryPtr, TgtVarsPtr, TgtOffsets,
-      TgtVarsSize, NumTeams, ThreadLimit, LoopTripCount);
+      TgtVarsSize, NumTeams, ThreadLimit, LoopTripCount,
+      depNum, depList, noAliasDepNum, noAliasDepList);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1260,7 +1275,8 @@ EXTERN void __tgt_unregister_lib(__tgt_bin_desc *desc) {
         if (Device.PendingCtorsDtors[desc].PendingCtors.empty()) {
           for (auto &dtor : Device.PendingCtorsDtors[desc].PendingDtors) {
             int rc = target(Device.DeviceID, dtor, 0, NULL, NULL, NULL, NULL, 1,
-                1, true /*team*/);
+                1, true /*team*/,
+                0, NULL, 0, NULL /*dependencies*/);
             if (rc != OFFLOAD_SUCCESS) {
               DP("Running destructor " DPxMOD " failed.\n", DPxPTR(dtor));
             }
@@ -1416,7 +1432,8 @@ static int InitLibrary(DeviceTy& Device) {
         for (auto &entry : lib.second.PendingCtors) {
           void *ctor = entry;
           int rc = target(device_id, ctor, 0, NULL, NULL, NULL,
-                          NULL, 1, 1, true /*team*/);
+                          NULL, 1, 1, true /*team*/,
+                          0, NULL, 0, NULL /*dependencies*/);
           if (rc != OFFLOAD_SUCCESS) {
             DP("Running ctor " DPxMOD " failed.\n", DPxPTR(ctor));
             Device.PendingGlobalsMtx.unlock();
@@ -1465,7 +1482,9 @@ static int member_of(int64_t type) {
 
 /// Internal function to do the mapping and transfer the data to the device
 static int target_data_begin(DeviceTy &Device, int32_t arg_num,
-    void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types) {
+    void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
+    int32_t depNum, void *depList, int32_t noAliasDepNum,
+    void *noAliasDepList) {
   // process each input.
   int rc = OFFLOAD_SUCCESS;
   for (int32_t i = 0; i < arg_num; ++i) {
@@ -1558,7 +1577,8 @@ static int target_data_begin(DeviceTy &Device, int32_t arg_num,
       if (copy) {
         DP("Moving %" PRId64 " bytes (hst:" DPxMOD ") -> (tgt:" DPxMOD ")\n",
             data_size, DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBegin));
-        int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, data_size);
+        int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, data_size, 
+                            depNum, depList, noAliasDepNum, noAliasDepList);
         if (rt != OFFLOAD_SUCCESS) {
           DP("Copying data to device failed.\n");
           rc = OFFLOAD_FAIL;
@@ -1572,7 +1592,8 @@ static int target_data_begin(DeviceTy &Device, int32_t arg_num,
       uint64_t Delta = (uint64_t)HstPtrBegin - (uint64_t)HstPtrBase;
       void *TgtPtrBase = (void *)((uint64_t)TgtPtrBegin - Delta);
       int rt = Device.data_submit(Pointer_TgtPtrBegin, &TgtPtrBase,
-          sizeof(void *));
+          sizeof(void *),
+          depNum, depList, noAliasDepNum, noAliasDepList);
       if (rt != OFFLOAD_SUCCESS) {
         DP("Copying data to device failed.\n");
         rc = OFFLOAD_FAIL;
@@ -1647,7 +1668,8 @@ EXTERN void __tgt_target_data_begin(int64_t device_id, int32_t arg_num,
   }
 #endif
 
-  target_data_begin(Device, arg_num, args_base, args, arg_sizes, arg_types);
+  target_data_begin(Device, arg_num, args_base, args, arg_sizes, arg_types, 
+    0, NULL, 0, NULL);
 }
 
 /// Internal function to undo the mapping and retrieve the data from the device.
@@ -1928,7 +1950,8 @@ EXTERN void __tgt_target_data_update(int64_t device_id, int32_t arg_num,
     if (arg_types[i] & OMP_TGT_MAPTYPE_TO) {
       DP("Moving %" PRId64 " bytes (hst:" DPxMOD ") -> (tgt:" DPxMOD ")\n",
           arg_sizes[i], DPxPTR(HstPtrBegin), DPxPTR(TgtPtrBegin));
-      Device.data_submit(TgtPtrBegin, HstPtrBegin, MapSize);
+      Device.data_submit(TgtPtrBegin, HstPtrBegin, MapSize,
+                    0, NULL, 0, NULL);
 
       uintptr_t lb = (uintptr_t) HstPtrBegin;
       uintptr_t ub = (uintptr_t) HstPtrBegin + MapSize;
@@ -1944,7 +1967,8 @@ EXTERN void __tgt_target_data_update(int64_t device_id, int32_t arg_num,
             "pointer " DPxMOD "\n", DPxPTR(it->second.TgtPtrVal),
             DPxPTR(it->second.TgtPtrAddr));
         Device.data_submit(it->second.TgtPtrAddr,
-            &it->second.TgtPtrVal, sizeof(void *));
+            &it->second.TgtPtrVal, sizeof(void *),
+            0, NULL, 0, NULL);
       }
       Device.ShadowMtx.unlock();
     }
@@ -1959,7 +1983,10 @@ EXTERN void __tgt_target_data_update(int64_t device_id, int32_t arg_num,
 /// integer different from zero otherwise.
 static int target(int64_t device_id, void *host_ptr, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
-    int32_t team_num, int32_t thread_limit, int IsTeamConstruct) {
+    int32_t team_num, int32_t thread_limit, int IsTeamConstruct,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList,
+    bool nowait) {
   DeviceTy &Device = Devices[device_id];
 
   // Find the table information in the map or look it up in the translation
@@ -2013,9 +2040,11 @@ static int target(int64_t device_id, void *host_ptr, int32_t arg_num,
   TrlTblMtx.unlock();
   assert(TargetTable && "Global data has not been mapped\n");
 
+  int rc = OFFLOAD_SUCCESS;
   // Move data to device.
-  int rc = target_data_begin(Device, arg_num, args_base, args, arg_sizes,
-      arg_types);
+  rc = target_data_begin(Device, arg_num, args_base, args, arg_sizes,
+      arg_types,
+      depNum, depList, noAliasDepNum, noAliasDepList);
 
   if (rc != OFFLOAD_SUCCESS) {
     DP("Call to target_data_begin failed, skipping target execution.\n");
@@ -2069,7 +2098,8 @@ static int target(int64_t device_id, void *host_ptr, int32_t arg_num,
 #endif
         // If first-private, copy data from host
         if (arg_types[i] & OMP_TGT_MAPTYPE_TO) {
-          int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, arg_sizes[i]);
+          int rt = Device.data_submit(TgtPtrBegin, HstPtrBegin, arg_sizes[i],
+                        depNum, depList, noAliasDepNum, noAliasDepList);
           if (rt != OFFLOAD_SUCCESS) {
             DP ("Copying data to device failed.\n");
             rc = OFFLOAD_FAIL;
@@ -2113,10 +2143,12 @@ static int target(int64_t device_id, void *host_ptr, int32_t arg_num,
     if (IsTeamConstruct) {
       rc = Device.run_team_region(TargetTable->EntriesBegin[TM->Index].addr,
           &tgt_args[0], &tgt_offsets[0], tgt_args.size(), team_num,
-          thread_limit, ltc);
+          thread_limit, ltc, 
+          depNum, depList, noAliasDepNum, noAliasDepList);
     } else {
       rc = Device.run_region(TargetTable->EntriesBegin[TM->Index].addr,
-          &tgt_args[0], &tgt_offsets[0], tgt_args.size());
+          &tgt_args[0], &tgt_offsets[0], tgt_args.size(),
+          depNum, depList, noAliasDepNum, noAliasDepList);
     }
   } else {
     DP("Errors occurred while obtaining target arguments, skipping kernel "
@@ -2167,7 +2199,8 @@ EXTERN int __tgt_target(int64_t device_id, void *host_ptr, int32_t arg_num,
 #endif
 
   int rc = target(device_id, host_ptr, arg_num, args_base, args, arg_sizes,
-      arg_types, 0, 0, false /*team*/);
+      arg_types, 0, 0, false /*team*/,
+      0, NULL, 0, NULL /*dependencies*/);
 
   return rc;
 }
@@ -2204,7 +2237,8 @@ EXTERN int __tgt_target_teams(int64_t device_id, void *host_ptr,
 #endif
 
   int rc = target(device_id, host_ptr, arg_num, args_base, args, arg_sizes,
-      arg_types, team_num, thread_limit, true /*team*/);
+      arg_types, team_num, thread_limit, true /*team*/,
+      0, NULL, 0, NULL /*dependencies*/);
 
   return rc;
 }
@@ -2225,9 +2259,7 @@ EXTERN int __tgt_target_teams_nowait_depend(int64_t device_id, void *host_ptr,
     int64_t *arg_types, int32_t team_num, int32_t thread_limit,
     int32_t depNum, void *depList, int32_t noAliasDepNum,
     void *noAliasDepList) {
-  int rc = OFFLOAD_SUCCESS;
 
-  DeviceTy &Device = Devices[device_id];
   DP("Entering target region nowait depend with entry point " DPxMOD " and device Id %" PRId64
       " with %d mappings and %d dependencies\n", DPxPTR(host_ptr), device_id, arg_num, depNum);
 
@@ -2238,8 +2270,30 @@ EXTERN int __tgt_target_teams_nowait_depend(int64_t device_id, void *host_ptr,
                                   (deps[i].flags.out << 1) | deps[i].flags.in);
   }
 
-  return __tgt_target_teams(device_id, host_ptr, arg_num, args_base, args,
-                            arg_sizes, arg_types, team_num, thread_limit);
+  if (device_id == OFFLOAD_DEVICE_DEFAULT) {
+    device_id = omp_get_default_device();
+  }
+
+  if (CheckDevice(device_id) != OFFLOAD_SUCCESS) {
+    DP("Failed to get device %" PRId64 " ready\n", device_id);
+    return OFFLOAD_FAIL;
+  }
+
+#ifdef OMPTARGET_DEBUG
+  for (int i=0; i<arg_num; ++i) {
+    DP("Entry %2d: Base=" DPxMOD ", Begin=" DPxMOD ", Size=%" PRId64
+        ", Type=0x%" PRIx64 "\n", i, DPxPTR(args_base[i]), DPxPTR(args[i]),
+        arg_sizes[i], arg_types[i]);
+  }
+#endif
+
+  int rc = target(device_id, host_ptr, arg_num, args_base, args, arg_sizes,
+      arg_types, team_num, thread_limit, true /*team*/,
+      depNum, (kmp_depend_info_t *)depList, 
+      noAliasDepNum, (kmp_depend_info_t *)noAliasDepList /*dependencies*/,
+      true /*nowait*/);
+
+  return rc;
 }
 
 // The trip count mechanism will be revised - this scheme is not thread-safe.

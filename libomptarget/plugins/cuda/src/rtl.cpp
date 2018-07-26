@@ -615,7 +615,9 @@ void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr) {
 }
 
 int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
-    int64_t size) {
+    int64_t size,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList) {
   // Set the context we are using.
   CUresult err = cuCtxSetCurrent(DeviceInfo.Contexts[device_id]);
   if (err != CUDA_SUCCESS) {
@@ -676,7 +678,9 @@ int32_t __tgt_rtl_data_delete(int32_t device_id, void *tgt_ptr) {
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t team_num,
-    int32_t thread_limit, uint64_t loop_tripcount) {
+    int32_t thread_limit, uint64_t loop_tripcount,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList) {
   // Set the context we are using.
   CUresult err = cuCtxSetCurrent(DeviceInfo.Contexts[device_id]);
   if (err != CUDA_SUCCESS) {
@@ -794,7 +798,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
       DP("Failed to allocate reduction scratchpad\n");
 #endif
     unsigned timestamp = 0;
-    __tgt_rtl_data_submit(device_id, Scratchpad, &timestamp, sizeof(unsigned));
+    __tgt_rtl_data_submit(device_id, Scratchpad, &timestamp, sizeof(unsigned),
+                          0, NULL, 0, NULL);
   }
   args[arg_num] = &Scratchpad;
 
@@ -830,7 +835,9 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 }
 
 int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num) {
+    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList) {
   // use one team and the default number of threads.
   const int32_t team_num = 1;
   const int32_t thread_limit = 0;
@@ -838,7 +845,8 @@ int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
   DP("Run target region thread_limit %d\n", thread_limit);
 
   return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-      tgt_offsets, arg_num, team_num, thread_limit, 0);
+      tgt_offsets, arg_num, team_num, thread_limit, 0,
+      0, NULL, 0, NULL);
 }
 
 #ifdef __cplusplus

@@ -26,6 +26,9 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <map>
+#include <set>
+#include <mutex>
 
 // Header from Clang for gpu grid info (static)
 #include "clang/Basic/GpuGridValues.h"
@@ -149,6 +152,9 @@ struct KernelTy {
 /// FIXME: we may need this to be per device and per library.
 std::list<KernelTy> KernelsList;
 
+typedef std::map<kmp_intptr_t, atmi_task_handle_t> DataTaskMapTy;
+typedef std::set<atmi_task_handle_t> WaitingTasksTy;
+
 /// Class containing all the device information
 class RTLDeviceInfoTy {
   std::vector<FuncOrGblEntryTy> FuncGblEntries;
@@ -156,6 +162,11 @@ class RTLDeviceInfoTy {
   int NumberOfdGPUs;
 public:
   int NumberOfDevices;
+
+  // Data dependency to task dependency mapping
+  DataTaskMapTy DataTaskMap;
+  WaitingTasksTy WaitingTasks;
+  std::mutex DataTaskMapMtx;
 
   // GPU devices
   atmi_machine_t *Machine;
@@ -238,7 +249,99 @@ public:
     E.Table.EntriesBegin = E.Table.EntriesEnd = 0;
   }
 
-  RTLDeviceInfoTy() {
+  std::vector<atmi_task_handle_t> getTaskDependencies(int32_t depNum,
+    kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList) {
+
+    std::vector<atmi_task_handle_t> deps;
+    deps.clear();
+
+    for(int i = 0; i < depNum; i++) {
+      if(depList[i].flags.in) {
+        DataTaskMapMtx.lock();
+        DataTaskMapTy::iterator taskMapIter = DataTaskMap.find(depList[i].base_addr);
+        if(taskMapIter != DataTaskMap.end()) {
+          // in dep; add to the ATMI dep list
+          atmi_task_handle_t task = taskMapIter->second;
+          deps.push_back(task);
+          // remove this task from the waiting list
+          // because its successor will be waiting
+          // for it anyway
+          WaitingTasks.erase(task);
+        }
+        DataTaskMapMtx.unlock();
+      }
+    }
+
+    for(int i = 0; i < noAliasDepNum; i++) {
+      if(noAliasDepList[i].flags.in) {
+        DataTaskMapMtx.lock();
+        DataTaskMapTy::iterator taskMapIter = DataTaskMap.find(noAliasDepList[i].base_addr);
+        if(taskMapIter != DataTaskMap.end()) {
+          // in dep; add to the ATMI dep list
+          atmi_task_handle_t task = taskMapIter->second;
+          deps.push_back(task);
+          // erase this task from the waiting list
+          // because its successor will be waiting
+          // for it anyway
+          WaitingTasks.erase(task);
+        }
+        DataTaskMapMtx.unlock();
+      }
+    }
+
+    return deps;
+  }
+
+  void setTaskDependency(atmi_task_handle_t task, int32_t depNum,
+    kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList) {
+
+    for(int i = 0; i < depNum; i++) {
+      if(depList[i].flags.out) {
+        DataTaskMapMtx.lock();
+        // out dep found; update the last task
+        DataTaskMap[depList[i].base_addr] = task;
+        // add this task to the waiting list
+        // because in case it has no further successors
+        // we need to wait for it at the next epoch boundary
+        WaitingTasks.insert(task);
+        DataTaskMapMtx.unlock();
+      }
+    }
+
+    for(int i = 0; i < noAliasDepNum; i++) {
+      if(noAliasDepList[i].flags.out) {
+        DataTaskMapMtx.lock();
+        // out dep found; update the last task
+        DataTaskMap[noAliasDepList[i].base_addr] = task;
+        // add this task to the waiting list
+        // because in case it has no further successors
+        // we need to wait for it at the next epoch boundary
+        WaitingTasks.insert(task);
+        DataTaskMapMtx.unlock();
+      }
+    }
+  }
+
+  void waitAllPendingTasks() {
+    DataTaskMapMtx.lock();
+    if(WaitingTasks.empty()) {
+        DataTaskMapMtx.unlock();
+        return;
+    }
+    WaitingTasksTy::iterator it = WaitingTasks.begin();
+    for(; it != WaitingTasks.end(); it++) {
+      atmi_task_wait(*it);
+    }
+    WaitingTasks.clear();
+    DataTaskMapMtx.unlock();
+  }
+
+  RTLDeviceInfoTy() : DataTaskMapMtx(),
+                      DataTaskMap(),
+                      WaitingTasks()
+  {
 #ifdef OMPTARGET_DEBUG
     if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
       DebugLevel = std::stoi(envStr);
@@ -794,7 +897,12 @@ void *__tgt_rtl_data_alloc(int device_id, int64_t size, void *){
     return ptr;
 }
 
-int32_t __tgt_rtl_data_submit(int device_id, void *tgt_ptr, void *hst_ptr, int64_t size){
+int32_t __tgt_rtl_data_submit(int device_id, void *tgt_ptr, void *hst_ptr, int64_t size,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList){
+    // FIXME: should we sync for all outstanding tasks before this???
+    DeviceInfo.waitAllPendingTasks();
+
     atmi_status_t err;
     assert(device_id < (int)DeviceInfo.Machine->device_count_by_type[ATMI_DEVTYPE_GPU] && "Device ID too large");
     DP("Submit data %ld bytes, (hst:%016llx) -> (tgt:%016llx).\n", size, (long long unsigned)(Elf64_Addr)hst_ptr, (long long unsigned)(Elf64_Addr)tgt_ptr);
@@ -809,6 +917,9 @@ int32_t __tgt_rtl_data_submit(int device_id, void *tgt_ptr, void *hst_ptr, int64
 }
 
 int32_t __tgt_rtl_data_retrieve(int device_id, void *hst_ptr, void *tgt_ptr, int64_t size){
+    // FIXME: should we sync for all outstanding tasks before this???
+    DeviceInfo.waitAllPendingTasks();
+
     assert(device_id < (int)DeviceInfo.Machine->device_count_by_type[ATMI_DEVTYPE_GPU] && "Device ID too large");
     atmi_status_t err;
     DP("Retrieve data %ld bytes, (tgt:%016llx) -> (hst:%016llx).\n", size, (long long unsigned)(Elf64_Addr)tgt_ptr, (long long unsigned)(Elf64_Addr)hst_ptr);
@@ -837,7 +948,9 @@ int32_t __tgt_rtl_data_delete(int device_id, void* tgt_ptr) {
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t team_num,
-    int32_t thread_limit, uint64_t loop_tripcount) {
+    int32_t thread_limit, uint64_t loop_tripcount,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList) {
 
   // atmi_status_t err;
   // not sure why omptarget includes a last NULL arg
@@ -947,7 +1060,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
       DP("Failed to allocate reduction scratchpad\n");
 #endif
     unsigned timestamp = 0;
-    __tgt_rtl_data_submit(device_id, Scratchpad, &timestamp, sizeof(unsigned));
+    __tgt_rtl_data_submit(device_id, Scratchpad, &timestamp, sizeof(unsigned),
+                          0, NULL, 0, NULL);
   }
   args[arg_num] = &Scratchpad;
 
@@ -956,13 +1070,24 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   DP("Launch kernel with %d blocks and %d threads\n", num_groups,
      threadsPerGroup);
 
+  // Collect all same-group in-deps together
+  // Create a new group for all same-group out-deps?
+  std::vector<atmi_task_handle_t> deps = DeviceInfo.getTaskDependencies(depNum,
+                                                depList, noAliasDepNum, noAliasDepList);
   ATMI_LPARM_1D(lparm, num_groups*threadsPerGroup);
   lparm->groupDim[0] = threadsPerGroup;
-  lparm->synchronous = ATMI_TRUE;
+  lparm->synchronous = (depNum+noAliasDepNum > 0) ? ATMI_FALSE : ATMI_TRUE; // FIXME: pass async param instead of this hack
   lparm->groupable = ATMI_FALSE;
   // TODO: CUDA does not look like being synchronous.
   lparm->place = DeviceInfo.GPUPlaces[device_id];
-  atmi_task_launch(lparm, kernel, &args[0]);
+  if(deps.size() > 0) {
+    lparm->num_required = deps.size();
+    lparm->requires = &deps[0];
+  }
+  atmi_task_handle_t task = atmi_task_launch(lparm, kernel, &args[0]);
+
+  DeviceInfo.setTaskDependency(task, depNum, depList, noAliasDepNum,
+                               noAliasDepList);
 
   DP("Kernel completed\n");
 
@@ -973,14 +1098,17 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 }
 
 int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num)
+    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList)
 {
   // use one team and one thread
   // fix thread num
   int32_t team_num = 1;
   int32_t thread_limit = 0; // use default
   return __tgt_rtl_run_target_team_region(device_id,
-      tgt_entry_ptr, tgt_args, tgt_offsets, arg_num, team_num, thread_limit, 0);
+      tgt_entry_ptr, tgt_args, tgt_offsets, arg_num, team_num, thread_limit, 0,
+      depNum, depList, noAliasDepNum, noAliasDepList);
 }
 
 #ifdef __cplusplus

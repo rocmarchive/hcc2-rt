@@ -277,7 +277,9 @@ void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr) {
 }
 
 int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
-                              int64_t size) {
+                              int64_t size,
+                              int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+                              kmp_depend_info_t *noAliasDepList) {
   memcpy(tgt_ptr, hst_ptr, size);
   return OFFLOAD_SUCCESS;
 }
@@ -295,7 +297,9 @@ int32_t __tgt_rtl_data_delete(int32_t device_id, void *tgt_ptr) {
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num, int32_t team_num,
-    int32_t thread_limit, uint64_t loop_tripcount /*not used*/) {
+    int32_t thread_limit, uint64_t loop_tripcount /*not used*/,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList) {
   // ignore team num and thread limit.
 
   // Use libffi to launch execution.
@@ -328,10 +332,13 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 }
 
 int32_t __tgt_rtl_run_target_region(int32_t device_id, void *tgt_entry_ptr,
-    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num) {
+    void **tgt_args, ptrdiff_t *tgt_offsets, int32_t arg_num,
+    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+    kmp_depend_info_t *noAliasDepList) {
   // use one team and one thread.
   return __tgt_rtl_run_target_team_region(device_id, tgt_entry_ptr, tgt_args,
-      tgt_offsets, arg_num, 1, 1, 0);
+      tgt_offsets, arg_num, 1, 1, 0,
+      0, NULL, 0, NULL);
 }
 
 #ifdef __cplusplus

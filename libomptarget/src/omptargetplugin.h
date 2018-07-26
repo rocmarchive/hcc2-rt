@@ -59,7 +59,9 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr);
 // Pass the data content to the target device using the target address.
 // In case of success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_submit(int32_t ID, void *TargetPtr, void *HostPtr,
-                              int64_t Size);
+                              int64_t Size,
+                              int32_t depNum, kmp_depend_info_t *depList,
+                              int32_t noAliasDepNum, kmp_depend_info_t *noAliasDepList);
 
 // Retrieve the data content from the target device using its address.
 // In case of success, return zero. Otherwise, return an error code.
@@ -76,14 +78,19 @@ int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr);
 // to the outlined function on device side. In case of success, return zero.
 // Otherwise, return an error code.
 int32_t __tgt_rtl_run_target_region(int32_t ID, void *Entry, void **Args,
-                                    ptrdiff_t *Offsets, int32_t NumArgs);
+                                    ptrdiff_t *Offsets, int32_t NumArgs,
+                                    int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+                                    kmp_depend_info_t *noAliasDepList);
 
 // Similar to __tgt_rtl_run_target_region, but additionally specify the
 // number of teams to be created and a number of threads in each team.
 int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
                                          ptrdiff_t *Offsets, int32_t NumArgs,
                                          int32_t NumTeams, int32_t ThreadLimit,
-                                         uint64_t loop_tripcount);
+                                         uint64_t loop_tripcount,
+                                         int32_t depNum, kmp_depend_info_t *depList, int32_t noAliasDepNum,
+                                         kmp_depend_info_t *noAliasDepList);
+
 
 #ifdef __cplusplus
 }
